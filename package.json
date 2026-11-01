@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fetch-bg-assets": "node scripts/fetch-bg-assets.mjs",
+    "postinstall": "node scripts/fetch-bg-assets.mjs"
   },
   "devDependencies": {
     "vite": "^8.3.5"

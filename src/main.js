@@ -153,7 +153,13 @@ btnRemoveBg.addEventListener('click', async () => {
   bgStatus.textContent = '배경 제거 모델을 불러오는 중... (처음 한 번은 다소 걸려요)';
   try {
     const { removeBackground } = await import('@imgly/background-removal');
+    const publicPath = new URL(
+      `${import.meta.env.BASE_URL}bg-assets/`,
+      window.location.origin
+    ).toString();
     const blob = await removeBackground(state.originalFile, {
+      publicPath,
+      model: 'isnet_fp16',
       progress: (key, current, total) => {
         bgStatus.textContent = `처리 중... ${key} (${current}/${total})`;
       },
@@ -178,7 +184,8 @@ btnRemoveBg.addEventListener('click', async () => {
     document.getElementById('btnDownloadPng').disabled = false;
   } catch (err) {
     console.error(err);
-    bgStatus.textContent = '⚠️ 배경 제거에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.';
+    const reason = err && err.message ? err.message : String(err);
+    bgStatus.textContent = `⚠️ 배경 제거에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요. (${reason})`;
     btnRemoveBg.disabled = false;
   }
 });
