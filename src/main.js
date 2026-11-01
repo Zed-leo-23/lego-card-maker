@@ -1,7 +1,8 @@
 import './style.css';
-import { applyLegoAnimationStyle, loadImageFromBlob, canvasToPngBlob } from './legoFilter.js';
+import { loadImageFromBlob, canvasToPngBlob } from './imageUtils.js';
+import { computeAutoCard, ELEMENTS, RARITY_LABELS } from './autoStats.js';
 import { getAllCards, saveCard, deleteCard, nextCardNumber } from './db.js';
-import { buildCardElement, THEMES } from './cardView.js';
+import { buildCardElement } from './cardView.js';
 
 const app = document.getElementById('app');
 
@@ -40,64 +41,47 @@ app.innerHTML = `
           </div>
         </li>
 
-        <li class="step" id="step-style">
-          <h2><span class="step-num">3</span> 2D 레고 애니메이션 스타일</h2>
-          <div class="controls" id="styleControls">
-            <label>윤곽선 굵기
-              <input type="range" id="edgeStrength" min="0" max="100" value="55" disabled />
-            </label>
-            <label>색상 단순화
-              <input type="range" id="posterLevels" min="2" max="8" value="4" disabled />
-            </label>
-            <label>채도
-              <input type="range" id="saturation" min="40" max="200" value="135" disabled />
-            </label>
-          </div>
-          <div class="preview-box checker">
-            <canvas id="styleCanvas"></canvas>
-          </div>
-        </li>
-
-        <li class="step" id="step-info">
-          <h2><span class="step-num">4</span> 카드 정보 입력</h2>
-          <form id="cardForm" class="card-form">
-            <label>작품 이름
-              <input id="fTitle" maxlength="20" placeholder="예: 우주 탐사선" disabled />
-            </label>
-            <label>테마
-              <select id="fTheme" disabled>
-                ${Object.entries(THEMES).map(([k, v]) => `<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
-              </select>
-            </label>
-            <label>피스 수
-              <input id="fPieces" type="number" min="0" placeholder="예: 350" disabled />
-            </label>
-            <label>제작일
-              <input id="fDate" type="date" disabled />
-            </label>
-            <label>난이도
-              <select id="fStars" disabled>
-                <option value="1">★☆☆☆☆</option>
-                <option value="2">★★☆☆☆</option>
-                <option value="3" selected>★★★☆☆</option>
-                <option value="4">★★★★☆</option>
-                <option value="5">★★★★★</option>
-              </select>
-            </label>
-            <label class="full">카드 설명
-              <textarea id="fNote" maxlength="120" rows="3" placeholder="이 작품에 대한 한마디를 남겨보세요" disabled></textarea>
-            </label>
-          </form>
-        </li>
-
         <li class="step" id="step-card">
-          <h2><span class="step-num">5</span> 카드 미리보기 &amp; 저장</h2>
-          <div class="card-stage">
-            <div id="cardPreviewMount"></div>
+          <h2><span class="step-num">3</span> 카드 완성하기</h2>
+          <p class="step-hint">사진을 분석해서 이름과 능력치를 자동으로 만들어드려요. 마음에 안 들면 다시 뽑기를 눌러보세요.</p>
+
+          <div class="finish-layout">
+            <form id="cardForm" class="card-form">
+              <label class="full">
+                작품 이름
+                <div class="name-row">
+                  <input id="fTitle" maxlength="24" placeholder="사진을 분석하면 자동으로 채워져요" disabled />
+                  <button type="button" id="btnReroll" class="secondary" disabled>🎲 다시 뽑기</button>
+                </div>
+              </label>
+
+              <div class="auto-stats" id="autoStats" hidden>
+                <span class="auto-stat" id="statElement"></span>
+                <span class="auto-stat">❤️ HP <b id="statHp"></b></span>
+                <span class="auto-stat">⚔ ATK <b id="statAtk"></b></span>
+                <span class="auto-stat">🛡 DEF <b id="statDef"></b></span>
+                <span class="auto-stat" id="statRarity"></span>
+              </div>
+
+              <label>피스 수 (선택)
+                <input id="fPieces" type="number" min="0" placeholder="예: 350" disabled />
+              </label>
+              <label>제작일
+                <input id="fDate" type="date" disabled />
+              </label>
+              <label class="full">카드 설명 (선택)
+                <textarea id="fNote" maxlength="120" rows="2" placeholder="이 작품에 대한 한마디를 남겨보세요" disabled></textarea>
+              </label>
+            </form>
+
+            <div class="card-stage">
+              <div id="cardPreviewMount"></div>
+            </div>
           </div>
+
           <div class="actions">
             <button id="btnSaveCard" disabled>⭐ 내 컬렉션에 저장</button>
-            <button id="btnDownloadPng" class="secondary" disabled>🖼️ 스타일 이미지 내보내기(PNG)</button>
+            <button id="btnDownloadPng" class="secondary" disabled>🖼️ 누끼컷 이미지 내보내기(PNG)</button>
             <button id="btnReset" class="ghost">↺ 새 카드로 시작</button>
           </div>
         </li>
@@ -120,9 +104,10 @@ app.innerHTML = `
 
 // ---------- 상태 ----------
 const state = {
-  bgRemovedImage: null, // Image (투명 배경 PNG)
-  styledCanvas: null,
+  bgCanvas: null, // 배경 제거된 결과를 그린 캔버스(카드 아트 원본)
   artDataUrl: null,
+  auto: null, // computeAutoCard() 결과 {name, element, hp, atk, def, rarity}
+  reroll: 0,
   selectedIds: new Set(),
 };
 
@@ -158,13 +143,8 @@ fileInput.addEventListener('change', async (e) => {
 });
 
 // ---------- 2. 배경 제거 ----------
-const bgCanvas = document.getElementById('bgCanvas');
+const bgCanvasEl = document.getElementById('bgCanvas');
 const bgStatus = document.getElementById('bgStatus');
-const styleInputs = {
-  edge: document.getElementById('edgeStrength'),
-  levels: document.getElementById('posterLevels'),
-  sat: document.getElementById('saturation'),
-};
 
 btnRemoveBg.addEventListener('click', async () => {
   if (!state.originalFile) return;
@@ -178,15 +158,23 @@ btnRemoveBg.addEventListener('click', async () => {
       },
     });
     const img = await loadImageFromBlob(blob);
-    state.bgRemovedImage = img;
 
-    bgCanvas.width = img.width;
-    bgCanvas.height = img.height;
-    bgCanvas.getContext('2d').drawImage(img, 0, 0);
+    bgCanvasEl.width = img.width;
+    bgCanvasEl.height = img.height;
+    bgCanvasEl.getContext('2d').drawImage(img, 0, 0);
+    state.bgCanvas = bgCanvasEl;
+    state.artDataUrl = bgCanvasEl.toDataURL('image/png');
 
-    bgStatus.textContent = '✅ 배경 제거 완료! 아래에서 결과를 확인하세요.';
-    Object.values(styleInputs).forEach((el) => (el.disabled = false));
-    applyStylePreview();
+    bgStatus.textContent = '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.';
+
+    state.reroll = 0;
+    generateAuto();
+
+    document.querySelectorAll('#cardForm input, #cardForm textarea')
+      .forEach((el) => (el.disabled = false));
+    document.getElementById('btnReroll').disabled = false;
+    document.getElementById('btnSaveCard').disabled = false;
+    document.getElementById('btnDownloadPng').disabled = false;
   } catch (err) {
     console.error(err);
     bgStatus.textContent = '⚠️ 배경 제거에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.';
@@ -194,55 +182,56 @@ btnRemoveBg.addEventListener('click', async () => {
   }
 });
 
-// ---------- 3. 스타일 적용 ----------
-const styleCanvas = document.getElementById('styleCanvas');
-let styleDebounce;
+// ---------- 3. 카드 완성 ----------
+const form = document.getElementById('cardForm');
+const fTitle = document.getElementById('fTitle');
+const fDate = document.getElementById('fDate');
+const autoStatsBox = document.getElementById('autoStats');
+fDate.value = new Date().toISOString().slice(0, 10);
 
-function applyStylePreview() {
-  if (!state.bgRemovedImage) return;
-  clearTimeout(styleDebounce);
-  styleDebounce = setTimeout(() => {
-    const canvas = applyLegoAnimationStyle(state.bgRemovedImage, {
-      levels: Number(styleInputs.levels.value),
-      saturation: Number(styleInputs.sat.value),
-      edgeStrength: Number(styleInputs.edge.value),
-    });
-    state.styledCanvas = canvas;
-    styleCanvas.width = canvas.width;
-    styleCanvas.height = canvas.height;
-    styleCanvas.getContext('2d').drawImage(canvas, 0, 0);
-    state.artDataUrl = canvas.toDataURL('image/png');
+function generateAuto() {
+  if (!state.bgCanvas) return;
+  const auto = computeAutoCard(state.bgCanvas, { nonce: state.reroll });
+  state.auto = auto;
+  fTitle.value = auto.name;
 
-    document.querySelectorAll('#cardForm input, #cardForm select, #cardForm textarea')
-      .forEach((el) => (el.disabled = false));
-    document.getElementById('btnSaveCard').disabled = false;
-    document.getElementById('btnDownloadPng').disabled = false;
-    updateCardPreview();
-  }, 80);
+  const element = ELEMENTS[auto.element];
+  const rarity = RARITY_LABELS[auto.rarity];
+  document.getElementById('statElement').textContent = `${element.icon} ${element.label}`;
+  document.getElementById('statHp').textContent = auto.hp;
+  document.getElementById('statAtk').textContent = auto.atk;
+  document.getElementById('statDef').textContent = auto.def;
+  document.getElementById('statRarity').textContent = rarity.label;
+  autoStatsBox.hidden = false;
+
+  updateCardPreview();
 }
 
-Object.values(styleInputs).forEach((el) => el.addEventListener('input', applyStylePreview));
+document.getElementById('btnReroll').addEventListener('click', () => {
+  state.reroll += 1;
+  generateAuto();
+});
 
-// ---------- 4. 카드 정보 ----------
-const form = document.getElementById('cardForm');
-const fDate = document.getElementById('fDate');
-fDate.value = new Date().toISOString().slice(0, 10);
 form.addEventListener('input', updateCardPreview);
 
 function currentCardData() {
+  const auto = state.auto || {};
   return {
-    title: document.getElementById('fTitle').value,
-    theme: document.getElementById('fTheme').value,
+    title: fTitle.value,
+    element: auto.element,
+    hp: auto.hp,
+    atk: auto.atk,
+    def: auto.def,
+    rarity: auto.rarity,
     pieces: document.getElementById('fPieces').value,
     date: fDate.value,
-    stars: document.getElementById('fStars').value,
     note: document.getElementById('fNote').value,
     artDataUrl: state.artDataUrl,
     cardNo: state.previewCardNo || 1,
   };
 }
 
-// ---------- 5. 카드 미리보기 ----------
+// ---------- 카드 미리보기 ----------
 const cardPreviewMount = document.getElementById('cardPreviewMount');
 
 function updateCardPreview() {
@@ -252,7 +241,7 @@ function updateCardPreview() {
 updateCardPreview();
 
 document.getElementById('btnSaveCard').addEventListener('click', async () => {
-  if (!state.artDataUrl) return;
+  if (!state.artDataUrl || !state.auto) return;
   const cardNo = await nextCardNumber();
   const card = { id: crypto.randomUUID(), createdAt: Date.now(), cardNo, ...currentCardData() };
   await saveCard(card);
@@ -262,12 +251,12 @@ document.getElementById('btnSaveCard').addEventListener('click', async () => {
 });
 
 document.getElementById('btnDownloadPng').addEventListener('click', async () => {
-  if (!state.styledCanvas) return;
-  const blob = await canvasToPngBlob(state.styledCanvas);
+  if (!state.bgCanvas) return;
+  const blob = await canvasToPngBlob(state.bgCanvas);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${document.getElementById('fTitle').value || 'lego-card'}.png`;
+  a.download = `${fTitle.value || 'lego-card'}.png`;
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -275,23 +264,25 @@ document.getElementById('btnDownloadPng').addEventListener('click', async () => 
 document.getElementById('btnReset').addEventListener('click', resetWizard);
 
 function resetWizard() {
-  state.bgRemovedImage = null;
-  state.styledCanvas = null;
+  state.bgCanvas = null;
   state.artDataUrl = null;
+  state.auto = null;
+  state.reroll = 0;
   state.originalFile = null;
   fileInput.value = '';
-  [originalCanvas, bgCanvas, styleCanvas].forEach((c) => {
+  [originalCanvas, bgCanvasEl].forEach((c) => {
     c.width = 0;
     c.height = 0;
   });
   uploadHint.hidden = false;
   bgStatus.textContent = '';
   btnRemoveBg.disabled = true;
-  Object.values(styleInputs).forEach((el) => (el.disabled = true));
+  autoStatsBox.hidden = true;
   form.reset();
   fDate.value = new Date().toISOString().slice(0, 10);
-  document.querySelectorAll('#cardForm input, #cardForm select, #cardForm textarea')
+  document.querySelectorAll('#cardForm input, #cardForm textarea')
     .forEach((el) => (el.disabled = true));
+  document.getElementById('btnReroll').disabled = true;
   document.getElementById('btnSaveCard').disabled = true;
   document.getElementById('btnDownloadPng').disabled = true;
   updateCardPreview();
