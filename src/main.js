@@ -22,10 +22,8 @@ app.innerHTML = `
         <li class="step" id="step-upload">
           <h2><span class="step-num">1</span> 작품 사진 올리기</h2>
           <p class="step-hint">배경이 단순한 곳(바닥, 책상)에서 밝게 찍으면 잘라내기가 더 잘 돼요.</p>
-          <label class="file-btn">
-            📷 사진 선택 / 촬영
-            <input type="file" id="fileInput" accept="image/*" capture="environment" hidden />
-          </label>
+          <button type="button" id="btnChoosePhoto" class="file-btn">📷 사진 선택 / 촬영</button>
+          <input type="file" id="fileInput" accept="image/*" class="visually-hidden" />
           <div class="preview-box">
             <canvas id="originalCanvas"></canvas>
             <p id="uploadHint" class="empty-hint">아직 사진이 없어요</p>
@@ -124,9 +122,12 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 
 // ---------- 1. 업로드 ----------
 const fileInput = document.getElementById('fileInput');
+const btnChoosePhoto = document.getElementById('btnChoosePhoto');
 const originalCanvas = document.getElementById('originalCanvas');
 const uploadHint = document.getElementById('uploadHint');
 const btnRemoveBg = document.getElementById('btnRemoveBg');
+
+btnChoosePhoto.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
