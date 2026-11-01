@@ -32,6 +32,63 @@ const PREFIXES = {
 };
 const NOUNS = ['기사', '수호자', '전사', '드래곤', '거신병', '탐사선', '요새', '매', '사자', '골렘', '전함', '로봇', '사령관', '파수꾼', '개척자'];
 
+const FLAVORS = {
+  fire: [
+    '용암보다 뜨거운 투지를 품고 있다.',
+    '닿는 것은 무엇이든 그을려 버린다.',
+    '분노가 들끓을수록 더 강해진다.',
+    '꺼지지 않는 불씨를 가슴에 숨겼다.',
+  ],
+  water: [
+    '깊은 바다처럼 속을 알 수 없다.',
+    '한 방울의 틈만 있어도 흘러든다.',
+    '거센 파도처럼 모든 걸 휩쓴다.',
+    '유연하지만 한번 밀리면 끝이 없다.',
+  ],
+  nature: [
+    '숲의 숨결을 몸에 두르고 있다.',
+    '뿌리처럼 조용히, 그러나 멈추지 않는다.',
+    '계절이 바뀌어도 변함없이 자란다.',
+    '야생의 감각으로 위험을 미리 느낀다.',
+  ],
+  lightning: [
+    '눈 깜짝할 사이에 거리를 좁힌다.',
+    '번쩍이는 섬광 뒤에 천둥이 따라온다.',
+    '멈춰 있을 때조차 전기가 흐른다.',
+    '폭풍의 속도로 전장을 가른다.',
+  ],
+  ice: [
+    '한번 얼리면 녹는 법이 없다.',
+    '차가운 겉모습 속에 치밀한 계산이 있다.',
+    '서리 낀 숨결로 주변을 얼어붙게 한다.',
+    '극한의 추위도 두렵지 않다.',
+  ],
+  arcane: [
+    '오래된 마법서에만 전해지는 존재다.',
+    '보이지 않는 힘으로 운명을 뒤튼다.',
+    '비밀스러운 주문을 혼자서 완성했다.',
+    '시간조차 비껴가는 듯한 기운을 지녔다.',
+  ],
+  light: [
+    '어둠 속에서도 홀로 빛난다.',
+    '그 빛을 따라 길 잃은 자들이 모여든다.',
+    '거짓을 밝혀내는 성스러운 힘이 있다.',
+    '여명과 함께 다시 일어선다.',
+  ],
+  steel: [
+    '빈틈없는 설계로 어떤 충격도 견딘다.',
+    '수없이 두드려 만든 단단함을 지녔다.',
+    '정밀하게 계산된 움직임만 보여준다.',
+    '녹슬지 않는 의지로 자리를 지킨다.',
+  ],
+  dark: [
+    '그림자 속에서만 진짜 모습을 드러낸다.',
+    '소리 없이 다가와 승부를 끝낸다.',
+    '깊은 어둠만큼 속을 가늠할 수 없다.',
+    '빛이 없는 곳에서 더 강해진다.',
+  ],
+};
+
 function pickElement(h, s, l) {
   if (s < 0.18) return l > 0.62 ? 'steel' : l < 0.28 ? 'dark' : 'steel';
   if (h < 20 || h >= 345) return 'fire';
@@ -129,11 +186,14 @@ export function computeAutoCard(source, opts = {}) {
   const noun = NOUNS[Math.floor(rand() * NOUNS.length)];
   const name = `${prefix} ${noun}`;
 
+  const flavorList = FLAVORS[element];
+  const note = flavorList[Math.floor(rand() * flavorList.length)];
+
   const power = hp + atk + def;
   let rarity = 'common';
   if (power >= 220) rarity = 'holo';
   else if (power >= 180) rarity = 'rare';
   else if (power >= 140) rarity = 'uncommon';
 
-  return { name, element, hp, atk, def, rarity };
+  return { name, element, hp, atk, def, rarity, note };
 }

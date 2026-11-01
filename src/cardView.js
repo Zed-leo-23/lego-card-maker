@@ -11,7 +11,6 @@ export function cardInnerHTML(card) {
   const element = ELEMENTS[card.element] || ELEMENTS.steel;
   const rarity = RARITY_LABELS[card.rarity] || RARITY_LABELS.common;
   const cardNo = String(card.cardNo || 1).padStart(3, '0');
-  const metaRight = card.pieces ? `${card.date || ''} · ${card.pieces}pcs` : (card.date || '');
 
   return `
     <div class="card-inner ${rarity.cls}">
@@ -31,7 +30,7 @@ export function cardInnerHTML(card) {
       </div>
       <div class="card-note-box">${escapeHtml(card.note || '')}</div>
       <div class="card-footer">
-        <span>${metaRight}</span>
+        <span>${card.date || ''}</span>
         <span class="card-rarity-label">${rarity.label}</span>
         <span>No. ${cardNo}</span>
       </div>

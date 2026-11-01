@@ -3,6 +3,9 @@ import { loadImageFromBlob, canvasToPngBlob } from './imageUtils.js';
 import { computeAutoCard, ELEMENTS, RARITY_LABELS } from './autoStats.js';
 import { getAllCards, saveCard, deleteCard, nextCardNumber } from './db.js';
 import { buildCardElement } from './cardView.js';
+import { simpleRemoveBackground } from './simpleBgRemoval.js';
+
+const AI_BG_REMOVAL_DISABLED_KEY = 'lego-card-ai-bg-removal-disabled';
 
 const app = document.getElementById('app');
 
@@ -61,14 +64,14 @@ app.innerHTML = `
                 <span class="auto-stat" id="statRarity"></span>
               </div>
 
-              <label>피스 수 (선택)
-                <input id="fPieces" type="number" min="0" placeholder="예: 350" disabled />
-              </label>
               <label>제작일
                 <input id="fDate" type="date" disabled />
               </label>
-              <label class="full">카드 설명 (선택)
-                <textarea id="fNote" maxlength="120" rows="2" placeholder="이 작품에 대한 한마디를 남겨보세요" disabled></textarea>
+              <label class="full">
+                카드 설명
+                <div class="name-row">
+                  <textarea id="fNote" maxlength="120" rows="2" placeholder="사진을 분석하면 자동으로 채워져요" disabled></textarea>
+                </div>
               </label>
             </form>
 
@@ -147,52 +150,87 @@ fileInput.addEventListener('change', async (e) => {
 const bgCanvasEl = document.getElementById('bgCanvas');
 const bgStatus = document.getElementById('bgStatus');
 
+async function removeBackgroundWithAi(file) {
+  const { removeBackground } = await import('@imgly/background-removal');
+  const publicPath = new URL(
+    `${import.meta.env.BASE_URL}bg-assets/`,
+    window.location.origin
+  ).toString();
+  const blob = await removeBackground(file, {
+    publicPath,
+    model: 'isnet_fp16',
+    progress: (key, current, total) => {
+      bgStatus.textContent = `처리 중... ${key} (${current}/${total})`;
+    },
+  });
+  const img = await loadImageFromBlob(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  canvas.getContext('2d').drawImage(img, 0, 0);
+  return canvas;
+}
+
+async function removeBackgroundWithFallback(file) {
+  const img = await loadImageFromBlob(file);
+  return simpleRemoveBackground(img);
+}
+
 btnRemoveBg.addEventListener('click', async () => {
   if (!state.originalFile) return;
   btnRemoveBg.disabled = true;
-  bgStatus.textContent = '배경 제거 모델을 불러오는 중... (처음 한 번은 다소 걸려요)';
-  try {
-    const { removeBackground } = await import('@imgly/background-removal');
-    const publicPath = new URL(
-      `${import.meta.env.BASE_URL}bg-assets/`,
-      window.location.origin
-    ).toString();
-    const blob = await removeBackground(state.originalFile, {
-      publicPath,
-      model: 'isnet_fp16',
-      progress: (key, current, total) => {
-        bgStatus.textContent = `처리 중... ${key} (${current}/${total})`;
-      },
-    });
-    const img = await loadImageFromBlob(blob);
 
-    bgCanvasEl.width = img.width;
-    bgCanvasEl.height = img.height;
-    bgCanvasEl.getContext('2d').drawImage(img, 0, 0);
-    state.bgCanvas = bgCanvasEl;
-    state.artDataUrl = bgCanvasEl.toDataURL('image/png');
+  let resultCanvas = null;
+  let usedFallback = false;
 
-    bgStatus.textContent = '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.';
-
-    state.reroll = 0;
-    generateAuto();
-
-    document.querySelectorAll('#cardForm input, #cardForm textarea')
-      .forEach((el) => (el.disabled = false));
-    document.getElementById('btnReroll').disabled = false;
-    document.getElementById('btnSaveCard').disabled = false;
-    document.getElementById('btnDownloadPng').disabled = false;
-  } catch (err) {
-    console.error(err);
-    const reason = err && err.message ? err.message : String(err);
-    bgStatus.textContent = `⚠️ 배경 제거에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요. (${reason})`;
-    btnRemoveBg.disabled = false;
+  if (!localStorage.getItem(AI_BG_REMOVAL_DISABLED_KEY)) {
+    bgStatus.textContent = '배경 제거 모델을 불러오는 중... (처음 한 번은 다소 걸려요)';
+    try {
+      resultCanvas = await removeBackgroundWithAi(state.originalFile);
+    } catch (err) {
+      console.warn('AI 배경 제거 실패, 간단 방식으로 대체합니다:', err);
+      localStorage.setItem(AI_BG_REMOVAL_DISABLED_KEY, '1');
+    }
   }
+
+  if (!resultCanvas) {
+    usedFallback = true;
+    try {
+      bgStatus.textContent = '간단 방식으로 배경을 제거하는 중...';
+      resultCanvas = await removeBackgroundWithFallback(state.originalFile);
+    } catch (err) {
+      console.error(err);
+      const reason = err && err.message ? err.message : String(err);
+      bgStatus.textContent = `⚠️ 배경 제거에 실패했어요. 다시 시도해주세요. (${reason})`;
+      btnRemoveBg.disabled = false;
+      return;
+    }
+  }
+
+  bgCanvasEl.width = resultCanvas.width;
+  bgCanvasEl.height = resultCanvas.height;
+  bgCanvasEl.getContext('2d').drawImage(resultCanvas, 0, 0);
+  state.bgCanvas = bgCanvasEl;
+  state.artDataUrl = bgCanvasEl.toDataURL('image/png');
+
+  bgStatus.textContent = usedFallback
+    ? '✅ 배경 제거 완료! (이 기기에서는 간단 방식을 사용했어요) 아래에서 카드를 완성해보세요.'
+    : '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.';
+
+  state.reroll = 0;
+  generateAuto();
+
+  document.querySelectorAll('#cardForm input, #cardForm textarea')
+    .forEach((el) => (el.disabled = false));
+  document.getElementById('btnReroll').disabled = false;
+  document.getElementById('btnSaveCard').disabled = false;
+  document.getElementById('btnDownloadPng').disabled = false;
 });
 
 // ---------- 3. 카드 완성 ----------
 const form = document.getElementById('cardForm');
 const fTitle = document.getElementById('fTitle');
+const fNote = document.getElementById('fNote');
 const fDate = document.getElementById('fDate');
 const autoStatsBox = document.getElementById('autoStats');
 fDate.value = new Date().toISOString().slice(0, 10);
@@ -202,6 +240,7 @@ function generateAuto() {
   const auto = computeAutoCard(state.bgCanvas, { nonce: state.reroll });
   state.auto = auto;
   fTitle.value = auto.name;
+  fNote.value = auto.note;
 
   const element = ELEMENTS[auto.element];
   const rarity = RARITY_LABELS[auto.rarity];
@@ -231,9 +270,8 @@ function currentCardData() {
     atk: auto.atk,
     def: auto.def,
     rarity: auto.rarity,
-    pieces: document.getElementById('fPieces').value,
     date: fDate.value,
-    note: document.getElementById('fNote').value,
+    note: fNote.value,
     artDataUrl: state.artDataUrl,
     cardNo: state.previewCardNo || 1,
   };
