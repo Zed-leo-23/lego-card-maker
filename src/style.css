@@ -148,14 +148,19 @@ button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slat
 
 .empty-hint { color: var(--muted); font-size: 13px; }
 
-/* ---------- 카드 생성 화면 (카드 자체가 편집 UI) ---------- */
+/* ---------- 카드 생성 화면 (카드와 같은 색으로 한 덩어리처럼 보이게) ---------- */
 .creator {
-  max-width: 300px;
+  max-width: 320px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-5);
+  background: linear-gradient(155deg, var(--creator-c1, #263238), var(--creator-c2, #90a4ae));
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-5);
+  box-shadow: var(--shadow-md);
+  transition: background 0.3s var(--ease);
 }
 
 .creator-toolbar {
@@ -169,47 +174,69 @@ button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slat
 .name-field input {
   flex: 1;
   min-width: 0;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: rgba(253, 251, 242, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  color: #22222a;
   border-radius: var(--radius-sm);
-  padding: 9px 11px;
+  padding: 10px 12px;
   font-size: 14px;
   font-weight: 700;
   font-family: inherit;
   transition: border-color 0.15s var(--ease);
 }
-.name-field input:focus { border-color: var(--accent); outline: none; }
+.name-field input:focus { border-color: var(--accent-ink); outline: 2px solid var(--accent); }
 
-.dice-btn-lg {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
+.creator-toolbar .dice-btn-lg,
+.creator-toolbar button.secondary {
+  background: rgba(253, 251, 242, 0.95);
+  color: #22222a;
+  border: 1px solid rgba(0, 0, 0, 0.2);
   font-size: 13px;
-  padding: 9px 12px;
+  padding: 10px 14px;
   white-space: nowrap;
 }
-.dice-btn-lg:hover:not(:disabled) { background: var(--slate-700); filter: none; }
-.dice-btn-lg span { color: var(--accent); font-weight: 800; }
+.creator-toolbar .dice-btn-lg:hover:not(:disabled),
+.creator-toolbar button.secondary:hover:not(:disabled) { background: #fff; filter: none; }
+.dice-btn-lg span { color: #b71c1c; font-weight: 800; }
 
 .card-stage { display: flex; justify-content: center; }
 
 .note-field {
   width: 100%;
   max-width: 260px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: rgba(253, 251, 242, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  color: #22222a;
   border-radius: var(--radius-sm);
-  padding: 9px 11px;
+  padding: 10px 12px;
   font-size: 13px;
   font-family: inherit;
   resize: vertical;
   transition: border-color 0.15s var(--ease);
 }
-.note-field:focus { border-color: var(--accent); outline: none; }
+.note-field::placeholder { color: #8a8574; }
+.note-field:focus { border-color: var(--accent-ink); outline: 2px solid var(--accent); }
 
 .actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
+.creator .actions button:not(.secondary):not(.ghost) {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.creator .actions button.secondary {
+  background: rgba(253, 251, 242, 0.95);
+  color: #22222a;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+.creator .actions button.secondary:hover:not(:disabled) { background: #fff; filter: none; }
+.creator .actions button.ghost {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.creator .actions button.ghost:hover:not(:disabled) {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.7);
+  filter: none;
+}
 
 /* ---------- 포켓몬 스타일 카드 ---------- */
 .poke-card {

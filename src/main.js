@@ -1,6 +1,6 @@
 import './style.css';
 import { loadImageFromBlob, canvasToPngBlob } from './imageUtils.js';
-import { computeAutoCard } from './autoStats.js';
+import { computeAutoCard, ELEMENTS } from './autoStats.js';
 import { getAllCards, saveCard, deleteCard, nextCardNumber } from './db.js';
 import { buildCardElement } from './cardView.js';
 
@@ -167,8 +167,16 @@ function currentCardData() {
 
 // ---------- 카드 미리보기 (이 카드 자체가 곧 편집 화면) ----------
 const cardPreviewMount = document.getElementById('cardPreviewMount');
+const creatorPanel = document.querySelector('.creator');
+
+function applyCreatorTheme() {
+  const element = ELEMENTS[state.auto?.element] || ELEMENTS.steel;
+  creatorPanel.style.setProperty('--creator-c1', element.c1);
+  creatorPanel.style.setProperty('--creator-c2', element.c2);
+}
 
 function updateCardPreview() {
+  applyCreatorTheme();
   cardPreviewMount.innerHTML = '';
   const cardEl = buildCardElement(currentCardData(), { editable: true });
   const captureBtn = cardEl.querySelector('#cardArtCapture');
