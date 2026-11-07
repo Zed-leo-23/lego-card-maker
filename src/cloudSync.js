@@ -20,8 +20,8 @@ const firebaseConfig = {
   projectId: 'lego-card',
   storageBucket: 'lego-card.firebasestorage.app',
   messagingSenderId: '361895092053',
-  appId: '1:361895092053:web:6e30ebfe32365ef05759dc',
-  measurementId: 'G-WQ89LHEFHY',
+  appId: '1:361895092053:web:99dcede63bd926995759dc',
+  measurementId: 'G-JMQR1X2201',
 };
 
 const app = initializeApp(firebaseConfig);
