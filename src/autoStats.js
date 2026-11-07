@@ -35,6 +35,38 @@ const PREFIXES = {
 const MECHA_NOUNS = ['드로이드', '메카', '기어봇', '사이보그', '아머', '워머신', '스트라이커', '건쉽', '메탈가드', '타이탄봇', '발칸', '유닛'];
 const CREATURE_NOUNS = ['수호자', '괴수', '골렘', '드래곤', '사자', '매', '거신병', '야수', '요수', '키메라', '그리폰', '리바이어던'];
 
+// 이름 문장 구조에 쓰이는 보조 단어들 - 매번 같은 "수식어+명사" 틀만 반복되지
+// 않도록, "OO의 ROLE" 같은 다른 틀도 섞어서 쓴다.
+const ROLE_WORDS = ['지배자', '계승자', '파수꾼', '사도', '현신', '수호신', '개척자', '심판자', '정복자', '방랑자'];
+const EPITHETS = ['전설의', '태초의', '금단의', '잊혀진', '영원한'];
+const MECHA_SERIALS = ['Mk-II', 'Mk-III', 'X-7', 'Type-3', 'Zero', 'V2'];
+
+/** 매번 같은 "형용사+명사" 틀만 쓰지 않도록 이름 문장 구조를 여러 개 섞는다. */
+function buildName(rand, element, style, prefix, noun) {
+  const elementLabel = ELEMENTS[element].label;
+  const role = () => ROLE_WORDS[Math.floor(rand() * ROLE_WORDS.length)];
+
+  const templateRoll = Math.floor(rand() * 3);
+  let name;
+  if (templateRoll === 0) {
+    name = `${prefix} ${noun}`;
+    // prefix가 이미 '~의' 형태면 수식어를 더했을 때 조사가 겹쳐 어색해지므로 피한다.
+    if (style === 'creature' && !prefix.endsWith('의') && rand() < 0.3) {
+      name = `${EPITHETS[Math.floor(rand() * EPITHETS.length)]} ${name}`;
+    }
+  } else if (templateRoll === 1) {
+    name = `${elementLabel}의 ${role()}`;
+  } else {
+    name = `${noun}의 ${role()}`;
+  }
+
+  if (style === 'mecha' && rand() < 0.4) {
+    name = `${name} ${MECHA_SERIALS[Math.floor(rand() * MECHA_SERIALS.length)]}`;
+  }
+
+  return name;
+}
+
 const FLAVORS = {
   fire: [
     '용암보다 뜨거운 투지를 품고 있다.',
@@ -241,7 +273,7 @@ export function computeAutoCard(source, opts = {}) {
   const nounList = style === 'mecha' ? MECHA_NOUNS : CREATURE_NOUNS;
   const prefix = prefixList[Math.floor(rand() * prefixList.length)];
   const noun = nounList[Math.floor(rand() * nounList.length)];
-  const name = `${prefix} ${noun}`;
+  const name = buildName(rand, element, style, prefix, noun);
 
   const flavorList = FLAVORS[element];
   const note = flavorList[Math.floor(rand() * flavorList.length)];
