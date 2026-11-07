@@ -3,10 +3,6 @@ import { loadImageFromBlob, canvasToPngBlob } from './imageUtils.js';
 import { computeAutoCard, ELEMENTS, RARITY_LABELS, rollStat, rarityForPower } from './autoStats.js';
 import { getAllCards, saveCard, deleteCard, nextCardNumber } from './db.js';
 import { buildCardElement } from './cardView.js';
-import { simpleRemoveBackground } from './simpleBgRemoval.js';
-import { floodErase, floodRestore } from './retouch.js';
-
-const AI_BG_REMOVAL_DISABLED_KEY = 'lego-card-ai-bg-removal-disabled';
 
 const app = document.getElementById('app');
 
@@ -25,7 +21,7 @@ app.innerHTML = `
       <ol class="wizard">
         <li class="step" id="step-upload">
           <h2><span class="step-num">1</span> 작품 사진 올리기</h2>
-          <p class="step-hint">배경이 단순한 곳(바닥, 책상)에서 밝게 찍으면 잘라내기가 더 잘 돼요.</p>
+          <p class="step-hint">배경이 단순한 곳(바닥, 책상)에서 밝게 찍으면 카드가 더 잘 나와요.</p>
           <button type="button" id="btnChoosePhoto" class="file-btn">📷 사진 선택 / 촬영</button>
           <input type="file" id="fileInput" accept="image/*" class="visually-hidden" />
           <div class="preview-box">
@@ -34,29 +30,8 @@ app.innerHTML = `
           </div>
         </li>
 
-        <li class="step" id="step-bg">
-          <h2><span class="step-num">2</span> 배경 제거 (누끼컷)</h2>
-          <button id="btnRemoveBg" disabled>✂️ 배경 제거하기</button>
-          <p id="bgStatus" class="step-hint"></p>
-          <div class="preview-box checker">
-            <canvas id="bgCanvas"></canvas>
-          </div>
-          <div class="retouch-tools" id="retouchTools" hidden>
-            <div class="retouch-row">
-              <button type="button" id="modeErase" class="mode-btn active">🧽 지우기</button>
-              <button type="button" id="modeRestore" class="mode-btn">↩️ 복원</button>
-              <button type="button" id="btnUndo" class="secondary" disabled>되돌리기</button>
-            </div>
-            <label class="retouch-tolerance-label">
-              민감도
-              <input type="range" id="retouchTolerance" min="10" max="90" value="32" />
-            </label>
-            <p class="step-hint">남은 배경을 탭하면 지워져요. 잘못 지워졌으면 '복원'을 누르고 탭하세요. 누른 채로 끌면 선을 따라 지울 수 있어요.</p>
-          </div>
-        </li>
-
         <li class="step" id="step-card">
-          <h2><span class="step-num">3</span> 카드 완성하기</h2>
+          <h2><span class="step-num">2</span> 카드 완성하기</h2>
           <p class="step-hint">사진을 분석해서 이름과 능력치를 자동으로 만들어드려요. 마음에 안 들면 다시 뽑기를 눌러보세요.</p>
 
           <div class="finish-layout">
@@ -64,7 +39,7 @@ app.innerHTML = `
               <label class="full">
                 작품 이름
                 <div class="name-row">
-                  <input id="fTitle" maxlength="24" placeholder="사진을 분석하면 자동으로 채워져요" disabled />
+                  <input id="fTitle" maxlength="24" placeholder="사진을 올리면 자동으로 채워져요" disabled />
                   <button type="button" id="btnReroll" class="secondary" disabled>🎲 다시 뽑기</button>
                 </div>
               </label>
@@ -92,7 +67,7 @@ app.innerHTML = `
               <label class="full">
                 카드 설명
                 <div class="name-row">
-                  <textarea id="fNote" maxlength="120" rows="2" placeholder="사진을 분석하면 자동으로 채워져요" disabled></textarea>
+                  <textarea id="fNote" maxlength="120" rows="2" placeholder="사진을 올리면 자동으로 채워져요" disabled></textarea>
                 </div>
               </label>
             </form>
@@ -104,7 +79,7 @@ app.innerHTML = `
 
           <div class="actions">
             <button id="btnSaveCard" disabled>⭐ 내 컬렉션에 저장</button>
-            <button id="btnDownloadPng" class="secondary" disabled>🖼️ 누끼컷 이미지 내보내기(PNG)</button>
+            <button id="btnDownloadPng" class="secondary" disabled>🖼️ 카드 이미지 내보내기(PNG)</button>
             <button id="btnReset" class="ghost">↺ 새 카드로 시작</button>
           </div>
         </li>
@@ -135,14 +110,11 @@ app.innerHTML = `
 
 // ---------- 상태 ----------
 const state = {
-  bgCanvas: null, // 배경 제거된 결과를 그린 캔버스(카드 아트 원본)
-  originalRefCanvas: null, // 복원용: 원본 사진을 bgCanvas와 같은 크기로 그려둔 캔버스
+  artCanvas: null, // 카드 아트로 쓸 사진 캔버스
   artDataUrl: null,
   auto: null, // computeAutoCard() 결과 {name, element, hp, atk, def, rarity}
   reroll: 0,
   selectedIds: new Set(),
-  retouchMode: 'erase',
-  undoStack: [],
   statRerolls: { hp: 5, atk: 5, def: 5 },
 };
 
@@ -162,7 +134,6 @@ const fileInput = document.getElementById('fileInput');
 const btnChoosePhoto = document.getElementById('btnChoosePhoto');
 const originalCanvas = document.getElementById('originalCanvas');
 const uploadHint = document.getElementById('uploadHint');
-const btnRemoveBg = document.getElementById('btnRemoveBg');
 
 btnChoosePhoto.addEventListener('click', () => fileInput.click());
 
@@ -170,116 +141,18 @@ fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const img = await loadImageFromBlob(file);
-  const maxW = 900;
+  const maxW = 1000;
   const scale = Math.min(1, maxW / img.width);
-  originalCanvas.width = img.width * scale;
-  originalCanvas.height = img.height * scale;
-  originalCanvas.getContext('2d').drawImage(img, 0, 0, originalCanvas.width, originalCanvas.height);
+  const width = Math.round(img.width * scale);
+  const height = Math.round(img.height * scale);
+
+  originalCanvas.width = width;
+  originalCanvas.height = height;
+  originalCanvas.getContext('2d').drawImage(img, 0, 0, width, height);
   uploadHint.hidden = true;
-  btnRemoveBg.disabled = false;
-  state.originalFile = file;
 
-  // Colab 등에서 미리 배경을 지운 PNG를 올리면, 배경 제거 단계를 건너뛰고 바로 카드로 넘어간다.
-  if (file.type === 'image/png' && detectAlreadyCutOut(img)) {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    canvas.getContext('2d').drawImage(img, 0, 0);
-    await finishBackgroundRemoval(canvas, {
-      statusMessage: '✅ 이미 배경이 투명한 사진이네요! 배경 제거를 건너뛰고 바로 카드를 만들어요.',
-      refSource: img,
-    });
-  }
-});
-
-// ---------- 2. 배경 제거 ----------
-const bgCanvasEl = document.getElementById('bgCanvas');
-const bgStatus = document.getElementById('bgStatus');
-
-async function removeBackgroundWithAi(file) {
-  const { removeBackground } = await import('@imgly/background-removal');
-  const publicPath = new URL(
-    `${import.meta.env.BASE_URL}bg-assets/`,
-    window.location.origin
-  ).toString();
-  const blob = await removeBackground(file, {
-    publicPath,
-    model: 'isnet_fp16',
-    progress: (key, current, total) => {
-      bgStatus.textContent = `처리 중... ${key} (${current}/${total})`;
-    },
-  });
-  const img = await loadImageFromBlob(blob);
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
-  canvas.getContext('2d').drawImage(img, 0, 0);
-  return canvas;
-}
-
-async function removeBackgroundWithFallback(file) {
-  const img = await loadImageFromBlob(file);
-  return simpleRemoveBackground(img);
-}
-
-btnRemoveBg.addEventListener('click', async () => {
-  if (!state.originalFile) return;
-  btnRemoveBg.disabled = true;
-
-  let resultCanvas = null;
-  let usedFallback = false;
-
-  if (!localStorage.getItem(AI_BG_REMOVAL_DISABLED_KEY)) {
-    bgStatus.textContent = '배경 제거 모델을 불러오는 중... (처음 한 번은 다소 걸려요)';
-    try {
-      resultCanvas = await removeBackgroundWithAi(state.originalFile);
-    } catch (err) {
-      console.warn('AI 배경 제거 실패, 간단 방식으로 대체합니다:', err);
-      localStorage.setItem(AI_BG_REMOVAL_DISABLED_KEY, '1');
-    }
-  }
-
-  if (!resultCanvas) {
-    usedFallback = true;
-    try {
-      bgStatus.textContent = '간단 방식으로 배경을 제거하는 중...';
-      resultCanvas = await removeBackgroundWithFallback(state.originalFile);
-    } catch (err) {
-      console.error(err);
-      const reason = err && err.message ? err.message : String(err);
-      bgStatus.textContent = `⚠️ 배경 제거에 실패했어요. 다시 시도해주세요. (${reason})`;
-      btnRemoveBg.disabled = false;
-      return;
-    }
-  }
-
-  await finishBackgroundRemoval(resultCanvas, {
-    statusMessage: usedFallback
-      ? '✅ 배경 제거 완료! (이 기기에서는 간단 방식을 사용했어요) 아래에서 카드를 완성해보세요.'
-      : '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.',
-  });
-});
-
-async function finishBackgroundRemoval(resultCanvas, { statusMessage, refSource } = {}) {
-  bgCanvasEl.width = resultCanvas.width;
-  bgCanvasEl.height = resultCanvas.height;
-  bgCanvasEl.getContext('2d').drawImage(resultCanvas, 0, 0);
-  state.bgCanvas = bgCanvasEl;
-  state.artDataUrl = bgCanvasEl.toDataURL('image/png');
-
-  const originalImgForRef = refSource || (await loadImageFromBlob(state.originalFile));
-  const refCanvas = document.createElement('canvas');
-  refCanvas.width = bgCanvasEl.width;
-  refCanvas.height = bgCanvasEl.height;
-  refCanvas.getContext('2d').drawImage(originalImgForRef, 0, 0, refCanvas.width, refCanvas.height);
-  state.originalRefCanvas = refCanvas;
-  state.undoStack = [];
-  btnUndo.disabled = true;
-  setRetouchMode('erase');
-  retouchTools.hidden = false;
-
-  bgStatus.textContent = statusMessage || '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.';
-  btnRemoveBg.disabled = false;
+  state.artCanvas = originalCanvas;
+  state.artDataUrl = originalCanvas.toDataURL('image/jpeg', 0.92);
 
   state.reroll = 0;
   generateAuto();
@@ -289,111 +162,9 @@ async function finishBackgroundRemoval(resultCanvas, { statusMessage, refSource 
   document.getElementById('btnReroll').disabled = false;
   document.getElementById('btnSaveCard').disabled = false;
   document.getElementById('btnDownloadPng').disabled = false;
-}
-
-/** 업로드한 이미지에 이미 투명 배경이 상당 부분 있으면(Colab 등에서 미리 자른 사진) true */
-function detectAlreadyCutOut(img) {
-  const sw = 80;
-  const scale = sw / Math.max(img.width, img.height);
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const ctx = c.getContext('2d');
-  ctx.drawImage(img, 0, 0, w, h);
-  const { data } = ctx.getImageData(0, 0, w, h);
-  let transparent = 0;
-  const total = w * h;
-  for (let i = 3; i < data.length; i += 4) {
-    if (data[i] === 0) transparent++;
-  }
-  return transparent / total > 0.05;
-}
-
-// ---------- 2-1. 터치로 배경 다듬기 (지우기 / 복원) ----------
-const retouchTools = document.getElementById('retouchTools');
-const modeEraseBtn = document.getElementById('modeErase');
-const modeRestoreBtn = document.getElementById('modeRestore');
-const btnUndo = document.getElementById('btnUndo');
-const retouchTolerance = document.getElementById('retouchTolerance');
-
-function setRetouchMode(mode) {
-  state.retouchMode = mode;
-  modeEraseBtn.classList.toggle('active', mode === 'erase');
-  modeRestoreBtn.classList.toggle('active', mode === 'restore');
-}
-modeEraseBtn.addEventListener('click', () => setRetouchMode('erase'));
-modeRestoreBtn.addEventListener('click', () => setRetouchMode('restore'));
-
-function pushUndo() {
-  const ctx = bgCanvasEl.getContext('2d');
-  const snap = ctx.getImageData(0, 0, bgCanvasEl.width, bgCanvasEl.height);
-  state.undoStack.push(snap);
-  if (state.undoStack.length > 15) state.undoStack.shift();
-  btnUndo.disabled = false;
-}
-
-btnUndo.addEventListener('click', () => {
-  if (!state.undoStack.length) return;
-  const snap = state.undoStack.pop();
-  bgCanvasEl.getContext('2d').putImageData(snap, 0, 0);
-  state.artDataUrl = bgCanvasEl.toDataURL('image/png');
-  updateCardPreview();
-  btnUndo.disabled = state.undoStack.length === 0;
 });
 
-function canvasPointFromEvent(e) {
-  const rect = bgCanvasEl.getBoundingClientRect();
-  const scaleX = bgCanvasEl.width / rect.width;
-  const scaleY = bgCanvasEl.height / rect.height;
-  return {
-    x: Math.floor((e.clientX - rect.left) * scaleX),
-    y: Math.floor((e.clientY - rect.top) * scaleY),
-  };
-}
-
-let retouchLastPoint = null;
-
-function applyRetouchAt(e, { force = false } = {}) {
-  if (!state.bgCanvas || !state.originalRefCanvas) return;
-  const { x, y } = canvasPointFromEvent(e);
-  if (!force && retouchLastPoint) {
-    const dx = x - retouchLastPoint.x, dy = y - retouchLastPoint.y;
-    if (dx * dx + dy * dy < 36) return;
-  }
-  retouchLastPoint = { x, y };
-
-  const ctx = bgCanvasEl.getContext('2d');
-  const tolerance = Number(retouchTolerance.value);
-  const changed = state.retouchMode === 'erase'
-    ? floodErase(ctx, x, y, tolerance)
-    : floodRestore(ctx, state.originalRefCanvas.getContext('2d'), x, y, tolerance);
-
-  if (changed) {
-    state.artDataUrl = bgCanvasEl.toDataURL('image/png');
-    updateCardPreview();
-  }
-}
-
-let retouchPointerDown = false;
-bgCanvasEl.addEventListener('pointerdown', (e) => {
-  if (!state.bgCanvas) return;
-  retouchPointerDown = true;
-  retouchLastPoint = null;
-  pushUndo();
-  applyRetouchAt(e, { force: true });
-  bgCanvasEl.setPointerCapture(e.pointerId);
-  e.preventDefault();
-});
-bgCanvasEl.addEventListener('pointermove', (e) => {
-  if (!retouchPointerDown) return;
-  applyRetouchAt(e);
-});
-window.addEventListener('pointerup', () => {
-  retouchPointerDown = false;
-});
-
-// ---------- 3. 카드 완성 ----------
+// ---------- 2. 카드 완성 ----------
 const form = document.getElementById('cardForm');
 const fTitle = document.getElementById('fTitle');
 const fNote = document.getElementById('fNote');
@@ -418,8 +189,8 @@ function updateStatDisplay() {
 }
 
 function generateAuto() {
-  if (!state.bgCanvas) return;
-  const auto = computeAutoCard(state.bgCanvas, { nonce: state.reroll });
+  if (!state.artCanvas) return;
+  const auto = computeAutoCard(state.artCanvas, { nonce: state.reroll });
   state.auto = auto;
   state.statRerolls = { hp: 5, atk: 5, def: 5 };
   fTitle.value = auto.name;
@@ -507,8 +278,8 @@ document.getElementById('btnSaveCard').addEventListener('click', async () => {
 });
 
 document.getElementById('btnDownloadPng').addEventListener('click', async () => {
-  if (!state.bgCanvas) return;
-  const blob = await canvasToPngBlob(state.bgCanvas);
+  if (!state.artCanvas) return;
+  const blob = await canvasToPngBlob(state.artCanvas);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -520,26 +291,16 @@ document.getElementById('btnDownloadPng').addEventListener('click', async () => 
 document.getElementById('btnReset').addEventListener('click', resetWizard);
 
 function resetWizard() {
-  state.bgCanvas = null;
-  state.originalRefCanvas = null;
+  state.artCanvas = null;
   state.artDataUrl = null;
   state.auto = null;
   state.reroll = 0;
-  state.originalFile = null;
-  state.undoStack = [];
   state.statRerolls = { hp: 5, atk: 5, def: 5 };
   fileInput.value = '';
-  [originalCanvas, bgCanvasEl].forEach((c) => {
-    c.width = 0;
-    c.height = 0;
-  });
+  originalCanvas.width = 0;
+  originalCanvas.height = 0;
   uploadHint.hidden = false;
-  bgStatus.textContent = '';
-  btnRemoveBg.disabled = true;
   autoStatsBox.hidden = true;
-  retouchTools.hidden = true;
-  btnUndo.disabled = true;
-  setRetouchMode('erase');
   form.reset();
   fDate.value = new Date().toISOString().slice(0, 10);
   document.querySelectorAll('#cardForm input, #cardForm textarea')

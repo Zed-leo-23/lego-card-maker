@@ -166,7 +166,7 @@ export function rollStat(key) {
 }
 
 /**
- * 배경이 제거된 작품 이미지를 분석해서 이름/속성/능력치/등급을 자동으로 만들어요.
+ * 작품 사진을 분석해서 이름/속성/능력치/등급을 자동으로 만들어요.
  * 같은 사진 + 같은 nonce 면 항상 같은 결과가 나오고, nonce를 바꾸면(다시 뽑기) 변형이 나와요.
  * @param {HTMLCanvasElement|HTMLImageElement} source
  * @param {{nonce?:number}} opts
@@ -184,28 +184,41 @@ export function computeAutoCard(source, opts = {}) {
   tctx.drawImage(source, 0, 0, w, h);
   const { data } = tctx.getImageData(0, 0, w, h);
 
-  let alphaCount = 0, rSum = 0, gSum = 0, bSum = 0;
+  // 배경을 따로 지우지 않으므로, 사진 중심부(피사체로 추정)와 테두리(배경으로
+  // 추정) 영역의 색 차이를 "피사체가 얼마나 뚜렷한가"의 대용치로 쓴다.
+  const cx0 = Math.round(w * 0.25), cx1 = Math.round(w * 0.75);
+  const cy0 = Math.round(h * 0.25), cy1 = Math.round(h * 0.75);
+  let centerR = 0, centerG = 0, centerB = 0, centerN = 0;
+  let borderR = 0, borderG = 0, borderB = 0, borderN = 0;
   const lumas = new Float32Array(w * h);
-  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-    const a = data[i + 3];
-    if (a > 20) {
-      alphaCount++;
-      rSum += data[i]; gSum += data[i + 1]; bSum += data[i + 2];
-      lumas[p] = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+
+  for (let y = 0, p = 0, i = 0; y < h; y++) {
+    for (let x = 0; x < w; x++, p++, i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      lumas[p] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const inCenter = x >= cx0 && x < cx1 && y >= cy0 && y < cy1;
+      if (inCenter) {
+        centerR += r; centerG += g; centerB += b; centerN++;
+      } else {
+        borderR += r; borderG += g; borderB += b; borderN++;
+      }
     }
   }
-  const total = w * h;
-  const sizeRatio = alphaCount / total;
-  const avgR = rSum / Math.max(1, alphaCount);
-  const avgG = gSum / Math.max(1, alphaCount);
-  const avgB = bSum / Math.max(1, alphaCount);
-  const [hue, sat, light] = rgbToHsl(avgR, avgG, avgB);
+  const centerAvg = [centerR / Math.max(1, centerN), centerG / Math.max(1, centerN), centerB / Math.max(1, centerN)];
+  const borderAvg = [borderR / Math.max(1, borderN), borderG / Math.max(1, borderN), borderB / Math.max(1, borderN)];
+  const [hue, sat, light] = rgbToHsl(...centerAvg);
+
+  const centerBorderDist = Math.sqrt(
+    (centerAvg[0] - borderAvg[0]) ** 2 +
+    (centerAvg[1] - borderAvg[1]) ** 2 +
+    (centerAvg[2] - borderAvg[2]) ** 2
+  );
+  const presence = clamp(centerBorderDist / 140, 0, 1);
 
   let gradSum = 0, gradCount = 0;
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const p = y * w + x;
-      if (!lumas[p]) continue;
       const gx = lumas[p + 1] - lumas[p - 1];
       const gy = lumas[p + w] - lumas[p - w];
       gradSum += Math.sqrt(gx * gx + gy * gy);
@@ -218,9 +231,9 @@ export function computeAutoCard(source, opts = {}) {
   const rand = mulberry32(seed);
   const jitter = (range) => Math.round((rand() - 0.5) * range);
 
-  const hp = clamp(Math.round(40 + sizeRatio * 55 + jitter(14)), 10, 99);
+  const hp = clamp(Math.round(40 + presence * 55 + jitter(14)), 10, 99);
   const atk = clamp(Math.round(15 + detailScore * 75 + jitter(14)), 5, 99);
-  const def = clamp(Math.round(15 + (1 - detailScore) * 45 + sizeRatio * 25 + jitter(12)), 5, 99);
+  const def = clamp(Math.round(15 + (1 - detailScore) * 45 + presence * 25 + jitter(12)), 5, 99);
 
   const element = pickElement(hue, sat, light);
   const style = pickStyle(detailScore, sat);

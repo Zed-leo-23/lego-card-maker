@@ -12,9 +12,6 @@ dist
 dist-ssr
 *.local
 
-# 배경 제거 모델/wasm 자산 - fetch-bg-assets 스크립트로 빌드 시점에 생성됨
-public/bg-assets
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
