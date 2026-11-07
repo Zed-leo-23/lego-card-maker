@@ -1,9 +1,10 @@
 import './style.css';
 import { loadImageFromBlob, canvasToPngBlob } from './imageUtils.js';
-import { computeAutoCard, ELEMENTS, RARITY_LABELS } from './autoStats.js';
+import { computeAutoCard, ELEMENTS, RARITY_LABELS, rollStat, rarityForPower } from './autoStats.js';
 import { getAllCards, saveCard, deleteCard, nextCardNumber } from './db.js';
 import { buildCardElement } from './cardView.js';
 import { simpleRemoveBackground } from './simpleBgRemoval.js';
+import { floodErase, floodRestore } from './retouch.js';
 
 const AI_BG_REMOVAL_DISABLED_KEY = 'lego-card-ai-bg-removal-disabled';
 
@@ -40,6 +41,18 @@ app.innerHTML = `
           <div class="preview-box checker">
             <canvas id="bgCanvas"></canvas>
           </div>
+          <div class="retouch-tools" id="retouchTools" hidden>
+            <div class="retouch-row">
+              <button type="button" id="modeErase" class="mode-btn active">🧽 지우기</button>
+              <button type="button" id="modeRestore" class="mode-btn">↩️ 복원</button>
+              <button type="button" id="btnUndo" class="secondary" disabled>되돌리기</button>
+            </div>
+            <label class="retouch-tolerance-label">
+              민감도
+              <input type="range" id="retouchTolerance" min="10" max="90" value="32" />
+            </label>
+            <p class="step-hint">남은 배경을 탭하면 지워져요. 잘못 지워졌으면 '복원'을 누르고 탭하세요. 누른 채로 끌면 선을 따라 지울 수 있어요.</p>
+          </div>
         </li>
 
         <li class="step" id="step-card">
@@ -58,9 +71,18 @@ app.innerHTML = `
 
               <div class="auto-stats" id="autoStats" hidden>
                 <span class="auto-stat" id="statElement"></span>
-                <span class="auto-stat">❤️ HP <b id="statHp"></b></span>
-                <span class="auto-stat">⚔ ATK <b id="statAtk"></b></span>
-                <span class="auto-stat">🛡 DEF <b id="statDef"></b></span>
+                <span class="auto-stat stat-with-dice">
+                  ❤️ HP <b id="statHp"></b>
+                  <button type="button" class="dice-btn" data-stat="hp" title="HP 다시 굴리기">🎲<small id="rerollHp">5</small></button>
+                </span>
+                <span class="auto-stat stat-with-dice">
+                  ⚔ ATK <b id="statAtk"></b>
+                  <button type="button" class="dice-btn" data-stat="atk" title="ATK 다시 굴리기">🎲<small id="rerollAtk">5</small></button>
+                </span>
+                <span class="auto-stat stat-with-dice">
+                  🛡 DEF <b id="statDef"></b>
+                  <button type="button" class="dice-btn" data-stat="def" title="DEF 다시 굴리기">🎲<small id="rerollDef">5</small></button>
+                </span>
                 <span class="auto-stat" id="statRarity"></span>
               </div>
 
@@ -101,15 +123,27 @@ app.innerHTML = `
   </main>
 
   <div id="printSheet" class="print-sheet"></div>
+
+  <div id="cardModal" class="card-modal" hidden>
+    <div class="card-modal-backdrop" id="cardModalBackdrop"></div>
+    <div class="card-modal-content">
+      <button type="button" id="btnCloseModal" class="modal-close" aria-label="닫기">✕</button>
+      <div id="cardModalMount"></div>
+    </div>
+  </div>
 `;
 
 // ---------- 상태 ----------
 const state = {
   bgCanvas: null, // 배경 제거된 결과를 그린 캔버스(카드 아트 원본)
+  originalRefCanvas: null, // 복원용: 원본 사진을 bgCanvas와 같은 크기로 그려둔 캔버스
   artDataUrl: null,
   auto: null, // computeAutoCard() 결과 {name, element, hp, atk, def, rarity}
   reroll: 0,
   selectedIds: new Set(),
+  retouchMode: 'erase',
+  undoStack: [],
+  statRerolls: { hp: 5, atk: 5, def: 5 },
 };
 
 // ---------- 탭 ----------
@@ -213,6 +247,17 @@ btnRemoveBg.addEventListener('click', async () => {
   state.bgCanvas = bgCanvasEl;
   state.artDataUrl = bgCanvasEl.toDataURL('image/png');
 
+  const originalImgForRef = await loadImageFromBlob(state.originalFile);
+  const refCanvas = document.createElement('canvas');
+  refCanvas.width = bgCanvasEl.width;
+  refCanvas.height = bgCanvasEl.height;
+  refCanvas.getContext('2d').drawImage(originalImgForRef, 0, 0, refCanvas.width, refCanvas.height);
+  state.originalRefCanvas = refCanvas;
+  state.undoStack = [];
+  btnUndo.disabled = true;
+  setRetouchMode('erase');
+  retouchTools.hidden = false;
+
   bgStatus.textContent = usedFallback
     ? '✅ 배경 제거 완료! (이 기기에서는 간단 방식을 사용했어요) 아래에서 카드를 완성해보세요.'
     : '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.';
@@ -227,6 +272,89 @@ btnRemoveBg.addEventListener('click', async () => {
   document.getElementById('btnDownloadPng').disabled = false;
 });
 
+// ---------- 2-1. 터치로 배경 다듬기 (지우기 / 복원) ----------
+const retouchTools = document.getElementById('retouchTools');
+const modeEraseBtn = document.getElementById('modeErase');
+const modeRestoreBtn = document.getElementById('modeRestore');
+const btnUndo = document.getElementById('btnUndo');
+const retouchTolerance = document.getElementById('retouchTolerance');
+
+function setRetouchMode(mode) {
+  state.retouchMode = mode;
+  modeEraseBtn.classList.toggle('active', mode === 'erase');
+  modeRestoreBtn.classList.toggle('active', mode === 'restore');
+}
+modeEraseBtn.addEventListener('click', () => setRetouchMode('erase'));
+modeRestoreBtn.addEventListener('click', () => setRetouchMode('restore'));
+
+function pushUndo() {
+  const ctx = bgCanvasEl.getContext('2d');
+  const snap = ctx.getImageData(0, 0, bgCanvasEl.width, bgCanvasEl.height);
+  state.undoStack.push(snap);
+  if (state.undoStack.length > 15) state.undoStack.shift();
+  btnUndo.disabled = false;
+}
+
+btnUndo.addEventListener('click', () => {
+  if (!state.undoStack.length) return;
+  const snap = state.undoStack.pop();
+  bgCanvasEl.getContext('2d').putImageData(snap, 0, 0);
+  state.artDataUrl = bgCanvasEl.toDataURL('image/png');
+  updateCardPreview();
+  btnUndo.disabled = state.undoStack.length === 0;
+});
+
+function canvasPointFromEvent(e) {
+  const rect = bgCanvasEl.getBoundingClientRect();
+  const scaleX = bgCanvasEl.width / rect.width;
+  const scaleY = bgCanvasEl.height / rect.height;
+  return {
+    x: Math.floor((e.clientX - rect.left) * scaleX),
+    y: Math.floor((e.clientY - rect.top) * scaleY),
+  };
+}
+
+let retouchLastPoint = null;
+
+function applyRetouchAt(e, { force = false } = {}) {
+  if (!state.bgCanvas || !state.originalRefCanvas) return;
+  const { x, y } = canvasPointFromEvent(e);
+  if (!force && retouchLastPoint) {
+    const dx = x - retouchLastPoint.x, dy = y - retouchLastPoint.y;
+    if (dx * dx + dy * dy < 36) return;
+  }
+  retouchLastPoint = { x, y };
+
+  const ctx = bgCanvasEl.getContext('2d');
+  const tolerance = Number(retouchTolerance.value);
+  const changed = state.retouchMode === 'erase'
+    ? floodErase(ctx, x, y, tolerance)
+    : floodRestore(ctx, state.originalRefCanvas.getContext('2d'), x, y, tolerance);
+
+  if (changed) {
+    state.artDataUrl = bgCanvasEl.toDataURL('image/png');
+    updateCardPreview();
+  }
+}
+
+let retouchPointerDown = false;
+bgCanvasEl.addEventListener('pointerdown', (e) => {
+  if (!state.bgCanvas) return;
+  retouchPointerDown = true;
+  retouchLastPoint = null;
+  pushUndo();
+  applyRetouchAt(e, { force: true });
+  bgCanvasEl.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+bgCanvasEl.addEventListener('pointermove', (e) => {
+  if (!retouchPointerDown) return;
+  applyRetouchAt(e);
+});
+window.addEventListener('pointerup', () => {
+  retouchPointerDown = false;
+});
+
 // ---------- 3. 카드 완성 ----------
 const form = document.getElementById('cardForm');
 const fTitle = document.getElementById('fTitle');
@@ -235,20 +363,31 @@ const fDate = document.getElementById('fDate');
 const autoStatsBox = document.getElementById('autoStats');
 fDate.value = new Date().toISOString().slice(0, 10);
 
+function updateStatDisplay() {
+  if (!state.auto) return;
+  const element = ELEMENTS[state.auto.element];
+  const rarity = RARITY_LABELS[state.auto.rarity];
+  document.getElementById('statElement').textContent = `${element.icon} ${element.label}`;
+  document.getElementById('statHp').textContent = state.auto.hp;
+  document.getElementById('statAtk').textContent = state.auto.atk;
+  document.getElementById('statDef').textContent = state.auto.def;
+  document.getElementById('statRarity').textContent = rarity.label;
+  ['hp', 'atk', 'def'].forEach((key) => {
+    const label = key[0].toUpperCase() + key.slice(1);
+    document.getElementById(`reroll${label}`).textContent = state.statRerolls[key];
+    document.querySelector(`.dice-btn[data-stat="${key}"]`).disabled = state.statRerolls[key] <= 0;
+  });
+}
+
 function generateAuto() {
   if (!state.bgCanvas) return;
   const auto = computeAutoCard(state.bgCanvas, { nonce: state.reroll });
   state.auto = auto;
+  state.statRerolls = { hp: 5, atk: 5, def: 5 };
   fTitle.value = auto.name;
   fNote.value = auto.note;
 
-  const element = ELEMENTS[auto.element];
-  const rarity = RARITY_LABELS[auto.rarity];
-  document.getElementById('statElement').textContent = `${element.icon} ${element.label}`;
-  document.getElementById('statHp').textContent = auto.hp;
-  document.getElementById('statAtk').textContent = auto.atk;
-  document.getElementById('statDef').textContent = auto.def;
-  document.getElementById('statRarity').textContent = rarity.label;
+  updateStatDisplay();
   autoStatsBox.hidden = false;
 
   updateCardPreview();
@@ -257,6 +396,18 @@ function generateAuto() {
 document.getElementById('btnReroll').addEventListener('click', () => {
   state.reroll += 1;
   generateAuto();
+});
+
+document.querySelectorAll('.dice-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.stat;
+    if (!state.auto || state.statRerolls[key] <= 0) return;
+    state.auto[key] = rollStat(key);
+    state.statRerolls[key] -= 1;
+    state.auto.rarity = rarityForPower(state.auto.hp + state.auto.atk + state.auto.def);
+    updateStatDisplay();
+    updateCardPreview();
+  });
 });
 
 form.addEventListener('input', updateCardPreview);
@@ -282,9 +433,30 @@ const cardPreviewMount = document.getElementById('cardPreviewMount');
 
 function updateCardPreview() {
   cardPreviewMount.innerHTML = '';
-  cardPreviewMount.appendChild(buildCardElement(currentCardData()));
+  const cardEl = buildCardElement(currentCardData());
+  cardEl.classList.add('clickable-card');
+  cardEl.addEventListener('click', () => openCardModal(currentCardData()));
+  cardPreviewMount.appendChild(cardEl);
 }
 updateCardPreview();
+
+// ---------- 카드 확대 보기 ----------
+const cardModal = document.getElementById('cardModal');
+const cardModalMount = document.getElementById('cardModalMount');
+
+function openCardModal(card) {
+  cardModalMount.innerHTML = '';
+  cardModalMount.appendChild(buildCardElement(card));
+  cardModal.hidden = false;
+}
+function closeCardModal() {
+  cardModal.hidden = true;
+}
+document.getElementById('btnCloseModal').addEventListener('click', closeCardModal);
+document.getElementById('cardModalBackdrop').addEventListener('click', closeCardModal);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !cardModal.hidden) closeCardModal();
+});
 
 document.getElementById('btnSaveCard').addEventListener('click', async () => {
   if (!state.artDataUrl || !state.auto) return;
@@ -311,10 +483,13 @@ document.getElementById('btnReset').addEventListener('click', resetWizard);
 
 function resetWizard() {
   state.bgCanvas = null;
+  state.originalRefCanvas = null;
   state.artDataUrl = null;
   state.auto = null;
   state.reroll = 0;
   state.originalFile = null;
+  state.undoStack = [];
+  state.statRerolls = { hp: 5, atk: 5, def: 5 };
   fileInput.value = '';
   [originalCanvas, bgCanvasEl].forEach((c) => {
     c.width = 0;
@@ -324,6 +499,9 @@ function resetWizard() {
   bgStatus.textContent = '';
   btnRemoveBg.disabled = true;
   autoStatsBox.hidden = true;
+  retouchTools.hidden = true;
+  btnUndo.disabled = true;
+  setRetouchMode('erase');
   form.reset();
   fDate.value = new Date().toISOString().slice(0, 10);
   document.querySelectorAll('#cardForm input, #cardForm textarea')
@@ -371,9 +549,13 @@ async function renderGallery() {
       renderGallery();
     });
 
+    const cardEl = buildCardElement(card, { thumb: true });
+    cardEl.classList.add('clickable-card');
+    cardEl.addEventListener('click', () => openCardModal(card));
+
     wrap.appendChild(checkbox);
     wrap.appendChild(delBtn);
-    wrap.appendChild(buildCardElement(card, { thumb: true }));
+    wrap.appendChild(cardEl);
     galleryGrid.appendChild(wrap);
   });
   updateSelectedCount();
