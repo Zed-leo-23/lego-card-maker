@@ -178,6 +178,18 @@ fileInput.addEventListener('change', async (e) => {
   uploadHint.hidden = true;
   btnRemoveBg.disabled = false;
   state.originalFile = file;
+
+  // Colab 등에서 미리 배경을 지운 PNG를 올리면, 배경 제거 단계를 건너뛰고 바로 카드로 넘어간다.
+  if (file.type === 'image/png' && detectAlreadyCutOut(img)) {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    await finishBackgroundRemoval(canvas, {
+      statusMessage: '✅ 이미 배경이 투명한 사진이네요! 배경 제거를 건너뛰고 바로 카드를 만들어요.',
+      refSource: img,
+    });
+  }
 });
 
 // ---------- 2. 배경 제거 ----------
@@ -241,13 +253,21 @@ btnRemoveBg.addEventListener('click', async () => {
     }
   }
 
+  await finishBackgroundRemoval(resultCanvas, {
+    statusMessage: usedFallback
+      ? '✅ 배경 제거 완료! (이 기기에서는 간단 방식을 사용했어요) 아래에서 카드를 완성해보세요.'
+      : '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.',
+  });
+});
+
+async function finishBackgroundRemoval(resultCanvas, { statusMessage, refSource } = {}) {
   bgCanvasEl.width = resultCanvas.width;
   bgCanvasEl.height = resultCanvas.height;
   bgCanvasEl.getContext('2d').drawImage(resultCanvas, 0, 0);
   state.bgCanvas = bgCanvasEl;
   state.artDataUrl = bgCanvasEl.toDataURL('image/png');
 
-  const originalImgForRef = await loadImageFromBlob(state.originalFile);
+  const originalImgForRef = refSource || (await loadImageFromBlob(state.originalFile));
   const refCanvas = document.createElement('canvas');
   refCanvas.width = bgCanvasEl.width;
   refCanvas.height = bgCanvasEl.height;
@@ -258,9 +278,8 @@ btnRemoveBg.addEventListener('click', async () => {
   setRetouchMode('erase');
   retouchTools.hidden = false;
 
-  bgStatus.textContent = usedFallback
-    ? '✅ 배경 제거 완료! (이 기기에서는 간단 방식을 사용했어요) 아래에서 카드를 완성해보세요.'
-    : '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.';
+  bgStatus.textContent = statusMessage || '✅ 배경 제거 완료! 아래에서 카드를 완성해보세요.';
+  btnRemoveBg.disabled = false;
 
   state.reroll = 0;
   generateAuto();
@@ -270,7 +289,26 @@ btnRemoveBg.addEventListener('click', async () => {
   document.getElementById('btnReroll').disabled = false;
   document.getElementById('btnSaveCard').disabled = false;
   document.getElementById('btnDownloadPng').disabled = false;
-});
+}
+
+/** 업로드한 이미지에 이미 투명 배경이 상당 부분 있으면(Colab 등에서 미리 자른 사진) true */
+function detectAlreadyCutOut(img) {
+  const sw = 80;
+  const scale = sw / Math.max(img.width, img.height);
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
+  let transparent = 0;
+  const total = w * h;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] === 0) transparent++;
+  }
+  return transparent / total > 0.05;
+}
 
 // ---------- 2-1. 터치로 배경 다듬기 (지우기 / 복원) ----------
 const retouchTools = document.getElementById('retouchTools');
