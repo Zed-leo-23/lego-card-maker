@@ -111,46 +111,6 @@ body {
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
-.wizard { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-5); }
-.step {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  box-shadow: var(--shadow-sm);
-}
-.step h2 {
-  margin: 0 0 var(--space-1);
-  font-size: 16px;
-  font-weight: 700;
-  display: flex; align-items: center; gap: var(--space-3);
-}
-.step-num {
-  width: 24px; height: 24px; border-radius: 50%;
-  background: var(--accent); color: var(--accent-ink);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 800;
-  flex-shrink: 0;
-}
-.step-hint { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 var(--space-3); }
-
-.file-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-  padding: 11px 20px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  border: none;
-  font-size: 14px;
-  transition: filter 0.15s var(--ease), transform 0.1s var(--ease);
-}
-.file-btn:hover { filter: brightness(1.06); }
-.file-btn:active { transform: translateY(1px); }
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -186,70 +146,70 @@ button.secondary:hover:not(:disabled) { background: var(--slate-700); filter: no
 button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slate-400); filter: none; }
 
-.preview-box {
-  margin-top: var(--space-4);
-  min-height: 140px;
-  border-radius: var(--radius-md);
-  background: var(--slate-950);
-  border: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: var(--space-2);
-}
-.preview-box canvas { max-width: 100%; max-height: 420px; display: block; border-radius: var(--radius-sm); }
 .empty-hint { color: var(--muted); font-size: 13px; }
 
-.finish-layout {
-  display: flex; gap: var(--space-6); flex-wrap: wrap; align-items: flex-start;
+/* ---------- 카드 생성 화면 (카드 자체가 편집 UI) ---------- */
+.creator {
+  max-width: 300px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
 }
-.finish-layout .card-form { flex: 1 1 320px; }
-.finish-layout .card-stage { flex: 0 0 auto; }
 
-.card-form { display: flex; flex-wrap: wrap; gap: var(--space-4); }
-.card-form label {
-  display: flex; flex-direction: column; gap: var(--space-2);
-  font-size: 13px; color: var(--muted);
-  flex: 1 1 160px;
+.creator-toolbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
-.card-form label.full { flex: 1 1 100%; }
-.card-form input, .card-form select, .card-form textarea {
+.name-field { display: flex; gap: var(--space-2); flex: 1 1 180px; }
+.name-field input {
+  flex: 1;
+  min-width: 0;
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
   padding: 9px 11px;
   font-size: 14px;
+  font-weight: 700;
   font-family: inherit;
   transition: border-color 0.15s var(--ease);
 }
-.card-form input:focus, .card-form select:focus, .card-form textarea:focus {
-  border-color: var(--accent);
-  outline: none;
-}
+.name-field input:focus { border-color: var(--accent); outline: none; }
 
-.name-row { display: flex; gap: var(--space-2); }
-.name-row input { flex: 1; }
-.name-row button { padding: 9px 14px; font-size: 13px; white-space: nowrap; }
-
-.auto-stats {
-  display: flex; flex-wrap: wrap; gap: var(--space-2);
-  flex: 1 1 100%;
-}
-.auto-stat {
+.dice-btn-lg {
   background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 5px 12px;
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--text);
+  font-size: 13px;
+  padding: 9px 12px;
+  white-space: nowrap;
 }
-.auto-stat b { color: var(--accent); }
+.dice-btn-lg:hover:not(:disabled) { background: var(--slate-700); filter: none; }
+.dice-btn-lg span { color: var(--accent); font-weight: 800; }
 
-.card-stage { display: flex; justify-content: center; padding: var(--space-2) 0; }
+.card-stage { display: flex; justify-content: center; }
 
-.actions { display: flex; gap: var(--space-3); justify-content: center; margin-top: var(--space-4); flex-wrap: wrap; }
+.note-field {
+  width: 100%;
+  max-width: 260px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.15s var(--ease);
+}
+.note-field:focus { border-color: var(--accent); outline: none; }
+
+.actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
 
 /* ---------- 포켓몬 스타일 카드 ---------- */
 .poke-card {
@@ -306,9 +266,48 @@ button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slat
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 .card-art img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .card-art-placeholder { color: #999; font-size: 12px; }
+
+.card-art-capture {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: #777;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px;
+}
+.card-art-capture:hover { background: rgba(0,0,0,0.04); filter: none; }
+.card-art-capture .capture-icon { font-size: 30px; }
+
+.card-art-retake {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.card-art-retake:hover { background: rgba(0,0,0,0.75); filter: none; }
 
 .card-stat-row {
   display: flex; align-items: center; gap: 4px;
@@ -412,29 +411,6 @@ button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slat
     box-shadow: none;
   }
 }
-
-@media (max-width: 640px) {
-  .card-form label { flex: 1 1 100%; }
-}
-
-/* ---------- 능력치 주사위 ---------- */
-.stat-with-dice { display: inline-flex; align-items: center; gap: 4px; }
-.dice-btn {
-  background: var(--slate-700);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 2px 6px;
-  border-radius: var(--radius-pill);
-  font-size: 11px;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  cursor: pointer;
-  transition: background 0.15s var(--ease);
-}
-.dice-btn:hover:not(:disabled) { background: var(--slate-600); filter: none; }
-.dice-btn small { color: var(--muted); font-weight: 700; }
-.dice-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* ---------- 카드 확대 보기 ---------- */
 .clickable-card { cursor: pointer; transition: transform 0.15s ease; }

@@ -7,10 +7,20 @@ function escapeHtml(str = '') {
 }
 
 /** @param {object} card */
-export function cardInnerHTML(card) {
+export function cardInnerHTML(card, { editable = false } = {}) {
   const element = ELEMENTS[card.element] || ELEMENTS.steel;
   const rarity = RARITY_LABELS[card.rarity] || RARITY_LABELS.common;
   const cardNo = String(card.cardNo || 1).padStart(3, '0');
+
+  const artContent = card.artDataUrl
+    ? `<img src="${card.artDataUrl}" alt="${escapeHtml(card.title || '')}" />` +
+      (editable ? '<button type="button" class="card-art-retake" id="cardArtRetake" title="다시 촬영">🔄</button>' : '')
+    : editable
+      ? `<button type="button" class="card-art-capture" id="cardArtCapture">
+          <span class="capture-icon">📷</span>
+          <span>탭해서 촬영 / 선택</span>
+        </button>`
+      : '<div class="card-art-placeholder">이미지 없음</div>';
 
   return `
     <div class="card-inner ${rarity.cls}">
@@ -19,9 +29,7 @@ export function cardInnerHTML(card) {
         <span class="card-hp">${element.icon} HP ${card.hp ?? 0}</span>
       </div>
       <div class="card-art">
-        ${card.artDataUrl
-          ? `<img src="${card.artDataUrl}" alt="${escapeHtml(card.title || '')}" />`
-          : '<div class="card-art-placeholder">이미지 없음</div>'}
+        ${artContent}
       </div>
       <div class="card-stat-row">
         <span class="card-stat atk">⚔ ${card.atk ?? 0}</span>
@@ -38,12 +46,12 @@ export function cardInnerHTML(card) {
   `;
 }
 
-export function buildCardElement(card, { thumb = false } = {}) {
+export function buildCardElement(card, { thumb = false, editable = false } = {}) {
   const element = ELEMENTS[card.element] || ELEMENTS.steel;
   const el = document.createElement('div');
   el.className = 'poke-card' + (thumb ? ' poke-card--thumb' : '');
   el.style.setProperty('--c1', element.c1);
   el.style.setProperty('--c2', element.c2);
-  el.innerHTML = cardInnerHTML(card);
+  el.innerHTML = cardInnerHTML(card, { editable });
   return el;
 }

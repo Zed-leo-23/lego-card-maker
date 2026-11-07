@@ -1,8 +1,10 @@
 import './style.css';
 import { loadImageFromBlob, canvasToPngBlob } from './imageUtils.js';
-import { computeAutoCard, ELEMENTS, RARITY_LABELS, rollStat, rarityForPower } from './autoStats.js';
+import { computeAutoCard } from './autoStats.js';
 import { getAllCards, saveCard, deleteCard, nextCardNumber } from './db.js';
 import { buildCardElement } from './cardView.js';
+
+const MAX_REROLLS = 3;
 
 const app = document.getElementById('app');
 
@@ -18,72 +20,31 @@ app.innerHTML = `
 
   <main>
     <section id="tab-create" class="tab-panel active">
-      <ol class="wizard">
-        <li class="step" id="step-upload">
-          <h2><span class="step-num">1</span> 작품 사진 올리기</h2>
-          <p class="step-hint">배경이 단순한 곳(바닥, 책상)에서 밝게 찍으면 카드가 더 잘 나와요.</p>
-          <button type="button" id="btnChoosePhoto" class="file-btn">📷 사진 선택 / 촬영</button>
-          <input type="file" id="fileInput" accept="image/*" class="visually-hidden" />
-          <div class="preview-box">
-            <canvas id="originalCanvas"></canvas>
-            <p id="uploadHint" class="empty-hint">아직 사진이 없어요</p>
+      <div class="creator">
+        <div class="creator-toolbar">
+          <div class="name-field">
+            <input id="fTitle" maxlength="24" placeholder="사진을 찍으면 이름이 자동으로 생겨요" />
+            <button type="button" id="btnReroll" class="dice-btn-lg" disabled title="이름·능력치 다시 뽑기">
+              🎲 <span id="rerollCount">${MAX_REROLLS}</span>
+            </button>
           </div>
-        </li>
+          <button type="button" id="btnGoGallery" class="secondary">🗂️ 카드 목록</button>
+        </div>
 
-        <li class="step" id="step-card">
-          <h2><span class="step-num">2</span> 카드 완성하기</h2>
-          <p class="step-hint">사진을 분석해서 이름과 능력치를 자동으로 만들어드려요. 마음에 안 들면 다시 뽑기를 눌러보세요.</p>
+        <div class="card-stage">
+          <div id="cardPreviewMount"></div>
+        </div>
 
-          <div class="finish-layout">
-            <form id="cardForm" class="card-form">
-              <label class="full">
-                작품 이름
-                <div class="name-row">
-                  <input id="fTitle" maxlength="24" placeholder="사진을 올리면 자동으로 채워져요" disabled />
-                  <button type="button" id="btnReroll" class="secondary" disabled>🎲 다시 뽑기</button>
-                </div>
-              </label>
+        <textarea id="fNote" class="note-field" maxlength="120" rows="2" placeholder="카드 설명이 자동으로 채워져요"></textarea>
 
-              <div class="auto-stats" id="autoStats" hidden>
-                <span class="auto-stat" id="statElement"></span>
-                <span class="auto-stat stat-with-dice">
-                  ❤️ HP <b id="statHp"></b>
-                  <button type="button" class="dice-btn" data-stat="hp" title="HP 다시 굴리기">🎲<small id="rerollHp">5</small></button>
-                </span>
-                <span class="auto-stat stat-with-dice">
-                  ⚔ ATK <b id="statAtk"></b>
-                  <button type="button" class="dice-btn" data-stat="atk" title="ATK 다시 굴리기">🎲<small id="rerollAtk">5</small></button>
-                </span>
-                <span class="auto-stat stat-with-dice">
-                  🛡 DEF <b id="statDef"></b>
-                  <button type="button" class="dice-btn" data-stat="def" title="DEF 다시 굴리기">🎲<small id="rerollDef">5</small></button>
-                </span>
-                <span class="auto-stat" id="statRarity"></span>
-              </div>
+        <div class="actions">
+          <button id="btnSaveCard" disabled>⭐ 저장</button>
+          <button id="btnDownloadPng" class="secondary" disabled>🖼️ PNG로 내보내기</button>
+          <button id="btnReset" class="ghost">↺ 새로 시작</button>
+        </div>
+      </div>
 
-              <label>제작일
-                <input id="fDate" type="date" disabled />
-              </label>
-              <label class="full">
-                카드 설명
-                <div class="name-row">
-                  <textarea id="fNote" maxlength="120" rows="2" placeholder="사진을 올리면 자동으로 채워져요" disabled></textarea>
-                </div>
-              </label>
-            </form>
-
-            <div class="card-stage">
-              <div id="cardPreviewMount"></div>
-            </div>
-          </div>
-
-          <div class="actions">
-            <button id="btnSaveCard" disabled>⭐ 내 컬렉션에 저장</button>
-            <button id="btnDownloadPng" class="secondary" disabled>🖼️ 카드 이미지 내보내기(PNG)</button>
-            <button id="btnReset" class="ghost">↺ 새 카드로 시작</button>
-          </div>
-        </li>
-      </ol>
+      <input type="file" id="fileInput" accept="image/*" class="visually-hidden" />
     </section>
 
     <section id="tab-gallery" class="tab-panel">
@@ -93,7 +54,7 @@ app.innerHTML = `
         <span id="selectedCount" class="hint-text"></span>
       </div>
       <div id="galleryGrid" class="gallery-grid"></div>
-      <p id="galleryEmpty" class="empty-hint">아직 저장된 카드가 없어요. '카드 만들기' 탭에서 첫 작품을 등록해보세요!</p>
+      <p id="galleryEmpty" class="empty-hint">아직 저장된 카드가 없어요. 사진을 찍어서 첫 작품을 등록해보세요!</p>
     </section>
   </main>
 
@@ -114,28 +75,23 @@ const state = {
   artDataUrl: null,
   auto: null, // computeAutoCard() 결과 {name, element, hp, atk, def, rarity}
   reroll: 0,
+  rerollsLeft: MAX_REROLLS,
   selectedIds: new Set(),
-  statRerolls: { hp: 5, atk: 5, def: 5 },
 };
 
 // ---------- 탭 ----------
+function goToTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
+  if (tab === 'gallery') renderGallery();
+}
 document.querySelectorAll('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-    if (btn.dataset.tab === 'gallery') renderGallery();
-  });
+  btn.addEventListener('click', () => goToTab(btn.dataset.tab));
 });
+document.getElementById('btnGoGallery').addEventListener('click', () => goToTab('gallery'));
 
-// ---------- 1. 업로드 ----------
+// ---------- 사진 촬영/선택 (카드의 빈 이미지 영역이 버튼 역할을 한다) ----------
 const fileInput = document.getElementById('fileInput');
-const btnChoosePhoto = document.getElementById('btnChoosePhoto');
-const originalCanvas = document.getElementById('originalCanvas');
-const uploadHint = document.getElementById('uploadHint');
-
-btnChoosePhoto.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -146,80 +102,52 @@ fileInput.addEventListener('change', async (e) => {
   const width = Math.round(img.width * scale);
   const height = Math.round(img.height * scale);
 
-  originalCanvas.width = width;
-  originalCanvas.height = height;
-  originalCanvas.getContext('2d').drawImage(img, 0, 0, width, height);
-  uploadHint.hidden = true;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
 
-  state.artCanvas = originalCanvas;
-  state.artDataUrl = originalCanvas.toDataURL('image/jpeg', 0.92);
-
+  state.artCanvas = canvas;
+  state.artDataUrl = canvas.toDataURL('image/jpeg', 0.92);
   state.reroll = 0;
-  generateAuto();
+  state.rerollsLeft = MAX_REROLLS;
 
-  document.querySelectorAll('#cardForm input, #cardForm textarea')
-    .forEach((el) => (el.disabled = false));
-  document.getElementById('btnReroll').disabled = false;
+  generateAuto();
+  updateRerollDisplay();
+
   document.getElementById('btnSaveCard').disabled = false;
   document.getElementById('btnDownloadPng').disabled = false;
 });
 
-// ---------- 2. 카드 완성 ----------
-const form = document.getElementById('cardForm');
+// ---------- 이름/능력치 자동 생성 + 다시 뽑기 ----------
 const fTitle = document.getElementById('fTitle');
 const fNote = document.getElementById('fNote');
-const fDate = document.getElementById('fDate');
-const autoStatsBox = document.getElementById('autoStats');
-fDate.value = new Date().toISOString().slice(0, 10);
-
-function updateStatDisplay() {
-  if (!state.auto) return;
-  const element = ELEMENTS[state.auto.element];
-  const rarity = RARITY_LABELS[state.auto.rarity];
-  document.getElementById('statElement').textContent = `${element.icon} ${element.label}`;
-  document.getElementById('statHp').textContent = state.auto.hp;
-  document.getElementById('statAtk').textContent = state.auto.atk;
-  document.getElementById('statDef').textContent = state.auto.def;
-  document.getElementById('statRarity').textContent = rarity.label;
-  ['hp', 'atk', 'def'].forEach((key) => {
-    const label = key[0].toUpperCase() + key.slice(1);
-    document.getElementById(`reroll${label}`).textContent = state.statRerolls[key];
-    document.querySelector(`.dice-btn[data-stat="${key}"]`).disabled = state.statRerolls[key] <= 0;
-  });
-}
+const btnReroll = document.getElementById('btnReroll');
 
 function generateAuto() {
   if (!state.artCanvas) return;
   const auto = computeAutoCard(state.artCanvas, { nonce: state.reroll });
   state.auto = auto;
-  state.statRerolls = { hp: 5, atk: 5, def: 5 };
   fTitle.value = auto.name;
   fNote.value = auto.note;
-
-  updateStatDisplay();
-  autoStatsBox.hidden = false;
-
   updateCardPreview();
 }
 
-document.getElementById('btnReroll').addEventListener('click', () => {
+function updateRerollDisplay() {
+  document.getElementById('rerollCount').textContent = state.rerollsLeft;
+  btnReroll.disabled = !state.artCanvas || state.rerollsLeft <= 0;
+}
+
+btnReroll.addEventListener('click', () => {
+  if (!state.artCanvas || state.rerollsLeft <= 0) return;
   state.reroll += 1;
+  state.rerollsLeft -= 1;
   generateAuto();
+  updateRerollDisplay();
 });
 
-document.querySelectorAll('.dice-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const key = btn.dataset.stat;
-    if (!state.auto || state.statRerolls[key] <= 0) return;
-    state.auto[key] = rollStat(key);
-    state.statRerolls[key] -= 1;
-    state.auto.rarity = rarityForPower(state.auto.hp + state.auto.atk + state.auto.def);
-    updateStatDisplay();
-    updateCardPreview();
-  });
-});
-
-form.addEventListener('input', updateCardPreview);
+fTitle.addEventListener('input', updateCardPreview);
+fNote.addEventListener('input', updateCardPreview);
 
 function currentCardData() {
   const auto = state.auto || {};
@@ -230,24 +158,27 @@ function currentCardData() {
     atk: auto.atk,
     def: auto.def,
     rarity: auto.rarity,
-    date: fDate.value,
+    date: new Date().toISOString().slice(0, 10),
     note: fNote.value,
     artDataUrl: state.artDataUrl,
     cardNo: state.previewCardNo || 1,
   };
 }
 
-// ---------- 카드 미리보기 ----------
+// ---------- 카드 미리보기 (이 카드 자체가 곧 편집 화면) ----------
 const cardPreviewMount = document.getElementById('cardPreviewMount');
 
 function updateCardPreview() {
   cardPreviewMount.innerHTML = '';
-  const cardEl = buildCardElement(currentCardData());
-  cardEl.classList.add('clickable-card');
-  cardEl.addEventListener('click', () => openCardModal(currentCardData()));
+  const cardEl = buildCardElement(currentCardData(), { editable: true });
+  const captureBtn = cardEl.querySelector('#cardArtCapture');
+  if (captureBtn) captureBtn.addEventListener('click', () => fileInput.click());
+  const retakeBtn = cardEl.querySelector('#cardArtRetake');
+  if (retakeBtn) retakeBtn.addEventListener('click', () => fileInput.click());
   cardPreviewMount.appendChild(cardEl);
 }
 updateCardPreview();
+updateRerollDisplay();
 
 // ---------- 카드 확대 보기 ----------
 const cardModal = document.getElementById('cardModal');
@@ -273,8 +204,8 @@ document.getElementById('btnSaveCard').addEventListener('click', async () => {
   const card = { id: crypto.randomUUID(), createdAt: Date.now(), cardNo, ...currentCardData() };
   await saveCard(card);
   renderGallery();
-  resetWizard();
-  document.querySelector('.tab-btn[data-tab="gallery"]').click();
+  resetCreator();
+  goToTab('gallery');
 });
 
 document.getElementById('btnDownloadPng').addEventListener('click', async () => {
@@ -288,26 +219,20 @@ document.getElementById('btnDownloadPng').addEventListener('click', async () => 
   URL.revokeObjectURL(url);
 });
 
-document.getElementById('btnReset').addEventListener('click', resetWizard);
+document.getElementById('btnReset').addEventListener('click', resetCreator);
 
-function resetWizard() {
+function resetCreator() {
   state.artCanvas = null;
   state.artDataUrl = null;
   state.auto = null;
   state.reroll = 0;
-  state.statRerolls = { hp: 5, atk: 5, def: 5 };
+  state.rerollsLeft = MAX_REROLLS;
   fileInput.value = '';
-  originalCanvas.width = 0;
-  originalCanvas.height = 0;
-  uploadHint.hidden = false;
-  autoStatsBox.hidden = true;
-  form.reset();
-  fDate.value = new Date().toISOString().slice(0, 10);
-  document.querySelectorAll('#cardForm input, #cardForm textarea')
-    .forEach((el) => (el.disabled = true));
-  document.getElementById('btnReroll').disabled = true;
+  fTitle.value = '';
+  fNote.value = '';
   document.getElementById('btnSaveCard').disabled = true;
   document.getElementById('btnDownloadPng').disabled = true;
+  updateRerollDisplay();
   updateCardPreview();
 }
 
