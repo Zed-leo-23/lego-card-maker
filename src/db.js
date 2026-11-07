@@ -1,27 +1,18 @@
-import { get, set } from 'idb-keyval';
-
-const KEY = 'lego-cards-v1';
+import { fetchAllCardsOnce, pushCard, removeCard } from './cloudSync.js';
 
 export async function getAllCards() {
-  const cards = await get(KEY);
-  return cards || [];
+  return fetchAllCardsOnce();
 }
 
 export async function saveCard(card) {
-  const cards = await getAllCards();
-  cards.unshift(card);
-  await set(KEY, cards);
-  return cards;
+  await pushCard(card);
 }
 
 export async function deleteCard(id) {
-  const cards = await getAllCards();
-  const next = cards.filter((c) => c.id !== id);
-  await set(KEY, next);
-  return next;
+  await removeCard(id);
 }
 
 export async function nextCardNumber() {
-  const cards = await getAllCards();
+  const cards = await fetchAllCardsOnce();
   return cards.length + 1;
 }

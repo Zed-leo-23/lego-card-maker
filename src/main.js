@@ -1,7 +1,8 @@
 import './style.css';
 import { loadImageFromBlob, canvasToPngBlob } from './imageUtils.js';
 import { computeAutoCard, ELEMENTS } from './autoStats.js';
-import { getAllCards, saveCard, deleteCard, nextCardNumber } from './db.js';
+import { saveCard, deleteCard } from './db.js';
+import { subscribeToCards } from './cloudSync.js';
 import { buildCardElement } from './cardView.js';
 
 const MAX_REROLLS = 3;
@@ -83,7 +84,6 @@ const state = {
 function goToTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
-  if (tab === 'gallery') renderGallery();
 }
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => goToTab(btn.dataset.tab));
@@ -208,12 +208,19 @@ window.addEventListener('keydown', (e) => {
 
 document.getElementById('btnSaveCard').addEventListener('click', async () => {
   if (!state.artDataUrl || !state.auto) return;
-  const cardNo = await nextCardNumber();
+  const btnSaveCard = document.getElementById('btnSaveCard');
+  btnSaveCard.disabled = true;
+  const cardNo = latestCards.length + 1;
   const card = { id: crypto.randomUUID(), createdAt: Date.now(), cardNo, ...currentCardData() };
-  await saveCard(card);
-  renderGallery();
-  resetCreator();
-  goToTab('gallery');
+  try {
+    await saveCard(card);
+    resetCreator();
+    goToTab('gallery');
+  } catch (err) {
+    console.error(err);
+    alert(`저장에 실패했어요. 인터넷 연결을 확인해주세요.\n(${err.message || err})`);
+    btnSaveCard.disabled = false;
+  }
 });
 
 document.getElementById('btnDownloadPng').addEventListener('click', async () => {
@@ -244,14 +251,16 @@ function resetCreator() {
   updateCardPreview();
 }
 
-// ---------- 갤러리 ----------
+// ---------- 갤러리 (Firestore 실시간 구독 - 다른 기기에서 저장해도 자동 반영) ----------
 const galleryGrid = document.getElementById('galleryGrid');
 const galleryEmpty = document.getElementById('galleryEmpty');
 const galleryCount = document.getElementById('galleryCount');
 const selectedCountEl = document.getElementById('selectedCount');
 
-async function renderGallery() {
-  const cards = await getAllCards();
+let latestCards = [];
+
+function renderGalleryFromCache() {
+  const cards = latestCards;
   galleryGrid.innerHTML = '';
   galleryCount.textContent = cards.length;
   galleryEmpty.hidden = cards.length !== 0;
@@ -276,9 +285,13 @@ async function renderGallery() {
     delBtn.title = '삭제';
     delBtn.addEventListener('click', async () => {
       if (!confirm('이 카드를 컬렉션에서 삭제할까요?')) return;
-      await deleteCard(card.id);
-      state.selectedIds.delete(card.id);
-      renderGallery();
+      try {
+        await deleteCard(card.id);
+        state.selectedIds.delete(card.id);
+      } catch (err) {
+        console.error(err);
+        alert(`삭제에 실패했어요.\n(${err.message || err})`);
+      }
     });
 
     const cardEl = buildCardElement(card, { thumb: true });
@@ -299,24 +312,34 @@ function updateSelectedCount() {
     : '';
 }
 
-document.getElementById('btnSelectAll').addEventListener('click', async () => {
-  const cards = await getAllCards();
-  if (state.selectedIds.size === cards.length) {
+subscribeToCards(
+  (cards) => {
+    latestCards = cards;
+    renderGalleryFromCache();
+  },
+  (err) => {
+    console.error(err);
+    galleryEmpty.hidden = false;
+    galleryEmpty.textContent = `⚠️ 카드 서버에 연결할 수 없어요. (${err.message || err})`;
+  }
+);
+
+document.getElementById('btnSelectAll').addEventListener('click', () => {
+  if (state.selectedIds.size === latestCards.length) {
     state.selectedIds.clear();
   } else {
-    cards.forEach((c) => state.selectedIds.add(c.id));
+    latestCards.forEach((c) => state.selectedIds.add(c.id));
   }
-  renderGallery();
+  renderGalleryFromCache();
 });
 
 // ---------- 인쇄 ----------
 const printSheet = document.getElementById('printSheet');
 
-document.getElementById('btnPrintSelected').addEventListener('click', async () => {
-  const cards = await getAllCards();
+document.getElementById('btnPrintSelected').addEventListener('click', () => {
   const target = state.selectedIds.size
-    ? cards.filter((c) => state.selectedIds.has(c.id))
-    : cards;
+    ? latestCards.filter((c) => state.selectedIds.has(c.id))
+    : latestCards;
   if (!target.length) {
     alert('인쇄할 카드가 없어요. 컬렉션에 카드를 먼저 저장해주세요.');
     return;
@@ -331,5 +354,3 @@ document.getElementById('btnPrintSelected').addEventListener('click', async () =
   requestAnimationFrame(() => window.print());
 });
 
-// ---------- 초기 렌더 ----------
-renderGallery();
