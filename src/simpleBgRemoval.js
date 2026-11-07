@@ -121,6 +121,46 @@ function findBackgroundRegions(data, width, height, clusters, tolerance) {
 }
 
 /**
+ * 0/255 마스크에 분리형 박스 블러를 적용해 경계를 부드럽게 만든다.
+ * AI 방식의 '알파 매팅'과 비슷하게, 윤곽선이 계단처럼 딱 끊기지 않고
+ * 자연스럽게 반투명으로 이어지도록 해서 "누끼가 어색해 보이는" 문제를 줄인다.
+ */
+function featherMask(mask, width, height, radius) {
+  if (radius <= 0) return mask;
+  const tmp = new Float32Array(width * height);
+  const out = new Float32Array(width * height);
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    let sum = 0;
+    for (let x = -radius; x <= radius; x++) {
+      sum += mask[row + Math.min(width - 1, Math.max(0, x))];
+    }
+    for (let x = 0; x < width; x++) {
+      tmp[row + x] = sum / (radius * 2 + 1);
+      const addX = Math.min(width - 1, x + radius + 1);
+      const subX = Math.max(0, x - radius);
+      sum += mask[row + addX] - mask[row + subX];
+    }
+  }
+
+  for (let x = 0; x < width; x++) {
+    let sum = 0;
+    for (let y = -radius; y <= radius; y++) {
+      sum += tmp[Math.min(height - 1, Math.max(0, y)) * width + x];
+    }
+    for (let y = 0; y < height; y++) {
+      out[y * width + x] = sum / (radius * 2 + 1);
+      const addY = Math.min(height - 1, y + radius + 1);
+      const subY = Math.max(0, y - radius);
+      sum += tmp[addY * width + x] - tmp[subY * width + x];
+    }
+  }
+
+  return out;
+}
+
+/**
  * @param {HTMLImageElement} img
  * @param {{maxSize?:number, tolerance?:number}} opts
  * @returns {HTMLCanvasElement}
@@ -156,8 +196,15 @@ export function simpleRemoveBackground(img, opts = {}) {
     attempts++;
   }
 
-  for (let p = 0; p < width * height; p++) {
-    if (result.background[p]) data[p * 4 + 3] = 0;
+  const total = width * height;
+  const foregroundMask = new Uint8Array(total);
+  for (let p = 0; p < total; p++) foregroundMask[p] = result.background[p] ? 0 : 255;
+
+  const featherRadius = Math.max(1, Math.round(Math.min(width, height) * 0.0035));
+  const softAlpha = featherMask(foregroundMask, width, height, featherRadius);
+
+  for (let p = 0; p < total; p++) {
+    data[p * 4 + 3] = Math.max(0, Math.min(255, Math.round(softAlpha[p])));
   }
 
   ctx.putImageData(imageData, 0, 0);
