@@ -13,9 +13,8 @@ app.innerHTML = `
   <div class="app-frame" id="appFrame">
     <header class="app-frame-header">
       <h1>🧱 레고 카드메이커</h1>
-      <p class="subtitle">부수기 전에, 작품을 포켓몬 카드처럼 영원히 간직하세요</p>
       <nav class="tabs">
-        <button class="tab-btn active" data-tab="create">카드 만들기</button>
+        <button class="tab-btn active" data-tab="create">📷</button>
         <button class="tab-btn" data-tab="gallery">내 컬렉션 <span id="galleryCount" class="count-badge">0</span></button>
       </nav>
     </header>
@@ -28,19 +27,15 @@ app.innerHTML = `
             🎲 <span id="rerollCount">${MAX_REROLLS}</span>
           </button>
         </div>
-        <button type="button" id="btnGoGallery" class="secondary">🗂️ 카드 목록</button>
       </div>
 
       <div class="card-stage">
         <div id="cardPreviewMount"></div>
       </div>
 
-      <textarea id="fNote" class="note-field" maxlength="120" rows="2" placeholder="카드 설명이 자동으로 채워져요"></textarea>
-
       <div class="actions">
         <button id="btnSaveCard" disabled>⭐ 저장</button>
         <button id="btnDownloadPng" class="secondary" disabled>🖼️ PNG로 내보내기</button>
-        <button id="btnReset" class="ghost">↺ 새로 시작</button>
       </div>
 
       <input type="file" id="fileInput" accept="image/*" class="visually-hidden" />
@@ -88,7 +83,6 @@ function goToTab(tab) {
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => goToTab(btn.dataset.tab));
 });
-document.getElementById('btnGoGallery').addEventListener('click', () => goToTab('gallery'));
 
 // ---------- 사진 촬영/선택 (카드의 빈 이미지 영역이 버튼 역할을 한다) ----------
 const fileInput = document.getElementById('fileInput');
@@ -121,7 +115,6 @@ fileInput.addEventListener('change', async (e) => {
 
 // ---------- 이름/능력치 자동 생성 + 다시 뽑기 ----------
 const fTitle = document.getElementById('fTitle');
-const fNote = document.getElementById('fNote');
 const btnReroll = document.getElementById('btnReroll');
 
 function generateAuto() {
@@ -129,7 +122,6 @@ function generateAuto() {
   const auto = computeAutoCard(state.artCanvas, { nonce: state.reroll });
   state.auto = auto;
   fTitle.value = auto.name;
-  fNote.value = auto.note;
   updateCardPreview();
 }
 
@@ -147,7 +139,6 @@ btnReroll.addEventListener('click', () => {
 });
 
 fTitle.addEventListener('input', updateCardPreview);
-fNote.addEventListener('input', updateCardPreview);
 
 function currentCardData() {
   const auto = state.auto || {};
@@ -159,7 +150,7 @@ function currentCardData() {
     def: auto.def,
     rarity: auto.rarity,
     date: new Date().toISOString().slice(0, 10),
-    note: fNote.value,
+    note: auto.note || '',
     artDataUrl: state.artDataUrl,
     cardNo: state.previewCardNo || 1,
   };
@@ -182,6 +173,10 @@ function updateCardPreview() {
   if (captureBtn) captureBtn.addEventListener('click', () => fileInput.click());
   const retakeBtn = cardEl.querySelector('#cardArtRetake');
   if (retakeBtn) retakeBtn.addEventListener('click', () => fileInput.click());
+  const resetBtn = cardEl.querySelector('#cardReset');
+  if (resetBtn) resetBtn.addEventListener('click', resetCreator);
+  const goGalleryBtn = cardEl.querySelector('#cardGoGallery');
+  if (goGalleryBtn) goGalleryBtn.addEventListener('click', () => goToTab('gallery'));
   cardPreviewMount.appendChild(cardEl);
 }
 updateCardPreview();
@@ -233,8 +228,6 @@ document.getElementById('btnDownloadPng').addEventListener('click', async () => 
   URL.revokeObjectURL(url);
 });
 
-document.getElementById('btnReset').addEventListener('click', resetCreator);
-
 function resetCreator() {
   state.artCanvas = null;
   state.artDataUrl = null;
@@ -243,7 +236,6 @@ function resetCreator() {
   state.rerollsLeft = MAX_REROLLS;
   fileInput.value = '';
   fTitle.value = '';
-  fNote.value = '';
   document.getElementById('btnSaveCard').disabled = true;
   document.getElementById('btnDownloadPng').disabled = true;
   updateRerollDisplay();

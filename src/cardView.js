@@ -25,8 +25,14 @@ export function cardInnerHTML(card, { editable = false } = {}) {
   return `
     <div class="card-inner ${rarity.cls}">
       <div class="card-header">
-        <span class="card-title">${escapeHtml(card.title || '이름 없는 작품')}</span>
-        <span class="card-hp">${element.icon} HP ${card.hp ?? 0}</span>
+        <div class="card-header-left">
+          <span class="card-title">${escapeHtml(card.title || '이름 없는 작품')}</span>
+          ${editable ? '<button type="button" class="card-mini-btn" id="cardReset" title="새로 시작">↺</button>' : ''}
+        </div>
+        <div class="card-header-right">
+          <span class="card-hp">${element.icon} HP ${card.hp ?? 0}</span>
+          ${editable ? '<button type="button" class="card-mini-btn" id="cardGoGallery" title="카드 목록">🗂️</button>' : ''}
+        </div>
       </div>
       <div class="card-art">
         ${artContent}
