@@ -10,39 +10,37 @@ const MAX_REROLLS = 3;
 const app = document.getElementById('app');
 
 app.innerHTML = `
-  <header class="topbar">
-    <h1>🧱 레고 카드메이커</h1>
-    <p class="subtitle">부수기 전에, 작품을 포켓몬 카드처럼 영원히 간직하세요</p>
-    <nav class="tabs">
-      <button class="tab-btn active" data-tab="create">카드 만들기</button>
-      <button class="tab-btn" data-tab="gallery">내 컬렉션 <span id="galleryCount" class="count-badge">0</span></button>
-    </nav>
-  </header>
+  <div class="app-frame" id="appFrame">
+    <header class="app-frame-header">
+      <h1>🧱 레고 카드메이커</h1>
+      <p class="subtitle">부수기 전에, 작품을 포켓몬 카드처럼 영원히 간직하세요</p>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="create">카드 만들기</button>
+        <button class="tab-btn" data-tab="gallery">내 컬렉션 <span id="galleryCount" class="count-badge">0</span></button>
+      </nav>
+    </header>
 
-  <main>
     <section id="tab-create" class="tab-panel active">
-      <div class="creator">
-        <div class="creator-toolbar">
-          <div class="name-field">
-            <input id="fTitle" maxlength="24" placeholder="사진을 찍으면 이름이 자동으로 생겨요" />
-            <button type="button" id="btnReroll" class="dice-btn-lg" disabled title="이름·능력치 다시 뽑기">
-              🎲 <span id="rerollCount">${MAX_REROLLS}</span>
-            </button>
-          </div>
-          <button type="button" id="btnGoGallery" class="secondary">🗂️ 카드 목록</button>
+      <div class="creator-toolbar">
+        <div class="name-field">
+          <input id="fTitle" maxlength="24" placeholder="사진을 찍으면 이름이 자동으로 생겨요" />
+          <button type="button" id="btnReroll" class="dice-btn-lg" disabled title="이름·능력치 다시 뽑기">
+            🎲 <span id="rerollCount">${MAX_REROLLS}</span>
+          </button>
         </div>
+        <button type="button" id="btnGoGallery" class="secondary">🗂️ 카드 목록</button>
+      </div>
 
-        <div class="card-stage">
-          <div id="cardPreviewMount"></div>
-        </div>
+      <div class="card-stage">
+        <div id="cardPreviewMount"></div>
+      </div>
 
-        <textarea id="fNote" class="note-field" maxlength="120" rows="2" placeholder="카드 설명이 자동으로 채워져요"></textarea>
+      <textarea id="fNote" class="note-field" maxlength="120" rows="2" placeholder="카드 설명이 자동으로 채워져요"></textarea>
 
-        <div class="actions">
-          <button id="btnSaveCard" disabled>⭐ 저장</button>
-          <button id="btnDownloadPng" class="secondary" disabled>🖼️ PNG로 내보내기</button>
-          <button id="btnReset" class="ghost">↺ 새로 시작</button>
-        </div>
+      <div class="actions">
+        <button id="btnSaveCard" disabled>⭐ 저장</button>
+        <button id="btnDownloadPng" class="secondary" disabled>🖼️ PNG로 내보내기</button>
+        <button id="btnReset" class="ghost">↺ 새로 시작</button>
       </div>
 
       <input type="file" id="fileInput" accept="image/*" class="visually-hidden" />
@@ -57,7 +55,7 @@ app.innerHTML = `
       <div id="galleryGrid" class="gallery-grid"></div>
       <p id="galleryEmpty" class="empty-hint">아직 저장된 카드가 없어요. 사진을 찍어서 첫 작품을 등록해보세요!</p>
     </section>
-  </main>
+  </div>
 
   <div id="printSheet" class="print-sheet"></div>
 
@@ -80,10 +78,12 @@ const state = {
   selectedIds: new Set(),
 };
 
-// ---------- 탭 ----------
+// ---------- 탭 (하나의 프레임 안에서 내용만 바뀐다) ----------
+const appFrame = document.getElementById('appFrame');
 function goToTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
+  appFrame.classList.toggle('app-frame--wide', tab === 'gallery');
 }
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => goToTab(btn.dataset.tab));
@@ -167,12 +167,11 @@ function currentCardData() {
 
 // ---------- 카드 미리보기 (이 카드 자체가 곧 편집 화면) ----------
 const cardPreviewMount = document.getElementById('cardPreviewMount');
-const creatorPanel = document.querySelector('.creator');
 
 function applyCreatorTheme() {
   const element = ELEMENTS[state.auto?.element] || ELEMENTS.steel;
-  creatorPanel.style.setProperty('--creator-c1', element.c1);
-  creatorPanel.style.setProperty('--creator-c2', element.c2);
+  appFrame.style.setProperty('--creator-c1', element.c1);
+  appFrame.style.setProperty('--creator-c2', element.c2);
 }
 
 function updateCardPreview() {
