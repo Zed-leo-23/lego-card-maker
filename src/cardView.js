@@ -11,6 +11,7 @@ export function cardInnerHTML(card, { editable = false } = {}) {
   const element = ELEMENTS[card.element] || ELEMENTS.steel;
   const rarity = RARITY_LABELS[card.rarity] || RARITY_LABELS.common;
   const cardNo = String(card.cardNo || 1).padStart(3, '0');
+  const hasPhoto = Boolean(card.artDataUrl);
 
   const artContent = card.artDataUrl
     ? `<img src="${card.artDataUrl}" alt="${escapeHtml(card.title || '')}" />` +
@@ -32,6 +33,7 @@ export function cardInnerHTML(card, { editable = false } = {}) {
         <div class="card-header-right">
           <span class="card-hp">${element.icon} HP ${card.hp ?? 0}</span>
           ${editable ? '<button type="button" class="card-mini-btn" id="cardGoGallery" title="카드 목록">🗂️</button>' : ''}
+          ${editable ? `<button type="button" class="card-mini-btn card-mini-btn--wide" id="cardReroll" ${(!hasPhoto || (card.rerollsLeft ?? 0) <= 0) ? 'disabled' : ''} title="이름·능력치 다시 뽑기">🎲<span class="mini-count">${card.rerollsLeft ?? 0}</span></button>` : ''}
         </div>
       </div>
       <div class="card-art">
@@ -44,9 +46,13 @@ export function cardInnerHTML(card, { editable = false } = {}) {
       </div>
       <div class="card-note-box">${escapeHtml(card.note || '')}</div>
       <div class="card-footer">
-        <span>${card.date || ''}</span>
-        <span class="card-rarity-label">${rarity.label}</span>
-        <span>No. ${cardNo}</span>
+        ${editable ? `<button type="button" class="card-mini-btn card-mini-btn--footer" id="cardSave" ${hasPhoto ? '' : 'disabled'} title="저장">⭐</button>` : ''}
+        <div class="card-footer-info">
+          <span>${card.date || ''}</span>
+          <span class="card-rarity-label">${rarity.label}</span>
+          <span>No. ${cardNo}</span>
+        </div>
+        ${editable ? `<button type="button" class="card-mini-btn card-mini-btn--footer" id="cardExportPng" ${hasPhoto ? '' : 'disabled'} title="PNG로 내보내기">🖼️</button>` : ''}
       </div>
     </div>
   `;

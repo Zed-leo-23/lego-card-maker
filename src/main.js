@@ -12,30 +12,14 @@ const app = document.getElementById('app');
 app.innerHTML = `
   <div class="app-frame" id="appFrame">
     <header class="app-frame-header">
-      <h1>🧱 레고 카드메이커</h1>
       <nav class="tabs">
-        <button class="tab-btn active" data-tab="create">📷</button>
         <button class="tab-btn" data-tab="gallery">내 컬렉션 <span id="galleryCount" class="count-badge">0</span></button>
       </nav>
     </header>
 
     <section id="tab-create" class="tab-panel active">
-      <div class="creator-toolbar">
-        <div class="name-field">
-          <input id="fTitle" maxlength="24" placeholder="사진을 찍으면 이름이 자동으로 생겨요" />
-          <button type="button" id="btnReroll" class="dice-btn-lg" disabled title="이름·능력치 다시 뽑기">
-            🎲 <span id="rerollCount">${MAX_REROLLS}</span>
-          </button>
-        </div>
-      </div>
-
       <div class="card-stage">
         <div id="cardPreviewMount"></div>
-      </div>
-
-      <div class="actions">
-        <button id="btnSaveCard" disabled>⭐ 저장</button>
-        <button id="btnDownloadPng" class="secondary" disabled>🖼️ PNG로 내보내기</button>
       </div>
 
       <input type="file" id="fileInput" accept="image/*" class="visually-hidden" />
@@ -43,6 +27,7 @@ app.innerHTML = `
 
     <section id="tab-gallery" class="tab-panel">
       <div class="gallery-toolbar">
+        <button id="btnBackToCreate" class="secondary">📷 새 카드</button>
         <button id="btnSelectAll" class="secondary">전체 선택</button>
         <button id="btnPrintSelected">🖨️ 선택한 카드 인쇄</button>
         <span id="selectedCount" class="hint-text"></span>
@@ -107,43 +92,19 @@ fileInput.addEventListener('change', async (e) => {
   state.rerollsLeft = MAX_REROLLS;
 
   generateAuto();
-  updateRerollDisplay();
-
-  document.getElementById('btnSaveCard').disabled = false;
-  document.getElementById('btnDownloadPng').disabled = false;
 });
 
 // ---------- 이름/능력치 자동 생성 + 다시 뽑기 ----------
-const fTitle = document.getElementById('fTitle');
-const btnReroll = document.getElementById('btnReroll');
-
 function generateAuto() {
   if (!state.artCanvas) return;
-  const auto = computeAutoCard(state.artCanvas, { nonce: state.reroll });
-  state.auto = auto;
-  fTitle.value = auto.name;
+  state.auto = computeAutoCard(state.artCanvas, { nonce: state.reroll });
   updateCardPreview();
 }
-
-function updateRerollDisplay() {
-  document.getElementById('rerollCount').textContent = state.rerollsLeft;
-  btnReroll.disabled = !state.artCanvas || state.rerollsLeft <= 0;
-}
-
-btnReroll.addEventListener('click', () => {
-  if (!state.artCanvas || state.rerollsLeft <= 0) return;
-  state.reroll += 1;
-  state.rerollsLeft -= 1;
-  generateAuto();
-  updateRerollDisplay();
-});
-
-fTitle.addEventListener('input', updateCardPreview);
 
 function currentCardData() {
   const auto = state.auto || {};
   return {
-    title: fTitle.value,
+    title: auto.name || '',
     element: auto.element,
     hp: auto.hp,
     atk: auto.atk,
@@ -153,6 +114,7 @@ function currentCardData() {
     note: auto.note || '',
     artDataUrl: state.artDataUrl,
     cardNo: state.previewCardNo || 1,
+    rerollsLeft: state.rerollsLeft,
   };
 }
 
@@ -177,10 +139,20 @@ function updateCardPreview() {
   if (resetBtn) resetBtn.addEventListener('click', resetCreator);
   const goGalleryBtn = cardEl.querySelector('#cardGoGallery');
   if (goGalleryBtn) goGalleryBtn.addEventListener('click', () => goToTab('gallery'));
+  const rerollBtn = cardEl.querySelector('#cardReroll');
+  if (rerollBtn) rerollBtn.addEventListener('click', () => {
+    if (!state.artCanvas || state.rerollsLeft <= 0) return;
+    state.reroll += 1;
+    state.rerollsLeft -= 1;
+    generateAuto();
+  });
+  const saveBtn = cardEl.querySelector('#cardSave');
+  if (saveBtn) saveBtn.addEventListener('click', handleSaveCard);
+  const exportBtn = cardEl.querySelector('#cardExportPng');
+  if (exportBtn) exportBtn.addEventListener('click', handleDownloadPng);
   cardPreviewMount.appendChild(cardEl);
 }
 updateCardPreview();
-updateRerollDisplay();
 
 // ---------- 카드 확대 보기 ----------
 const cardModal = document.getElementById('cardModal');
@@ -200,10 +172,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !cardModal.hidden) closeCardModal();
 });
 
-document.getElementById('btnSaveCard').addEventListener('click', async () => {
+async function handleSaveCard() {
   if (!state.artDataUrl || !state.auto) return;
-  const btnSaveCard = document.getElementById('btnSaveCard');
-  btnSaveCard.disabled = true;
   const cardNo = latestCards.length + 1;
   const card = { id: crypto.randomUUID(), createdAt: Date.now(), cardNo, ...currentCardData() };
   try {
@@ -213,20 +183,19 @@ document.getElementById('btnSaveCard').addEventListener('click', async () => {
   } catch (err) {
     console.error(err);
     alert(`저장에 실패했어요. 인터넷 연결을 확인해주세요.\n(${err.message || err})`);
-    btnSaveCard.disabled = false;
   }
-});
+}
 
-document.getElementById('btnDownloadPng').addEventListener('click', async () => {
+async function handleDownloadPng() {
   if (!state.artCanvas) return;
   const blob = await canvasToPngBlob(state.artCanvas);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${fTitle.value || 'lego-card'}.png`;
+  a.download = `${state.auto?.name || 'lego-card'}.png`;
   a.click();
   URL.revokeObjectURL(url);
-});
+}
 
 function resetCreator() {
   state.artCanvas = null;
@@ -235,10 +204,6 @@ function resetCreator() {
   state.reroll = 0;
   state.rerollsLeft = MAX_REROLLS;
   fileInput.value = '';
-  fTitle.value = '';
-  document.getElementById('btnSaveCard').disabled = true;
-  document.getElementById('btnDownloadPng').disabled = true;
-  updateRerollDisplay();
   updateCardPreview();
 }
 
@@ -314,6 +279,8 @@ subscribeToCards(
     galleryEmpty.textContent = `⚠️ 카드 서버에 연결할 수 없어요. (${err.message || err})`;
   }
 );
+
+document.getElementById('btnBackToCreate').addEventListener('click', () => goToTab('create'));
 
 document.getElementById('btnSelectAll').addEventListener('click', () => {
   if (state.selectedIds.size === latestCards.length) {

@@ -69,14 +69,6 @@ body {
 .app-frame-header {
   text-align: center;
 }
-.app-frame-header h1 {
-  margin: 0 0 var(--space-4);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.5);
-}
-
 .tabs {
   display: inline-flex;
   background: rgba(0, 0, 0, 0.18);
@@ -96,7 +88,6 @@ body {
   font-weight: 600;
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
-.tab-btn[data-tab="create"] { font-size: 16px; padding: 8px 18px; }
 .tab-btn:hover:not(.active) { color: #fff; background: rgba(255,255,255,0.12); }
 .tab-btn.active { background: rgba(253, 251, 242, 0.95); color: #22222a; }
 .count-badge {
@@ -173,64 +164,7 @@ button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slat
 .app-frame--wide { max-width: 820px; }
 .app-frame-header { width: 100%; }
 
-.creator-toolbar {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-.name-field { display: flex; gap: var(--space-2); flex: 1 1 180px; }
-.name-field input {
-  flex: 1;
-  min-width: 0;
-  background: rgba(253, 251, 242, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  color: #22222a;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: inherit;
-  transition: border-color 0.15s var(--ease);
-}
-.name-field input:focus { border-color: var(--accent-ink); outline: 2px solid var(--accent); }
-
-.creator-toolbar .dice-btn-lg,
-.creator-toolbar button.secondary {
-  background: rgba(253, 251, 242, 0.95);
-  color: #22222a;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  font-size: 13px;
-  padding: 10px 14px;
-  white-space: nowrap;
-}
-.creator-toolbar .dice-btn-lg:hover:not(:disabled),
-.creator-toolbar button.secondary:hover:not(:disabled) { background: #fff; filter: none; }
-.dice-btn-lg span { color: #b71c1c; font-weight: 800; }
-
 .card-stage { display: flex; justify-content: center; }
-
-.actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
-.app-frame .actions button:not(.secondary):not(.ghost) {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.app-frame .actions button.secondary {
-  background: rgba(253, 251, 242, 0.95);
-  color: #22222a;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-}
-.app-frame .actions button.secondary:hover:not(:disabled) { background: #fff; filter: none; }
-.app-frame .actions button.ghost {
-  color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-.app-frame .actions button.ghost:hover:not(:disabled) {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.7);
-  filter: none;
-}
 
 /* ---------- 포켓몬 스타일 카드 ---------- */
 .poke-card {
@@ -287,6 +221,10 @@ button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slat
   cursor: pointer;
 }
 .card-mini-btn:hover { background: rgba(0,0,0,0.18); filter: none; }
+.card-mini-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.card-mini-btn--wide { width: auto; padding: 0 6px; border-radius: 999px; }
+.card-mini-btn .mini-count { font-size: 8px; margin-left: 1px; color: #b71c1c; font-weight: 800; }
+.card-mini-btn--footer { width: 16px; height: 16px; font-size: 9px; }
 
 .card-art {
   flex: 1;
@@ -386,9 +324,10 @@ button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--slat
 }
 
 .card-footer {
-  display: flex; justify-content: space-between;
+  display: flex; align-items: center; gap: 4px;
   font-size: 8.5px; color: #777; margin-top: 5px;
 }
+.card-footer-info { flex: 1; display: flex; justify-content: space-between; min-width: 0; }
 
 .rarity-holo .card-inner {
   background: linear-gradient(120deg, #fdfbf2 60%, #e8f7ff 70%, #fdfbf2 80%);
